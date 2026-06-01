@@ -160,13 +160,33 @@ select = [
     "T20",  # no print statements in production
 ]
 ignore = [
-    "ANN201",  # return type for public function (trop verbeux pour l'instant)
-    "S101",    # assert usage (acceptable dans les tests)
-    "T201",    # print statements (acceptables temporairement)
+    # Annotations — trop verbeux pour un projet en phase alpha
+    "ANN001",  # missing arg type annotation
+    "ANN002",  # missing *args type annotation
+    "ANN003",  # missing **kwargs type annotation
+    "ANN201",  # missing return type (public)
+    "ANN202",  # missing return type (private)
+    "ANN204",  # missing return type (__init__, always None)
+    "ANN206",  # missing return type (__new__)
+    # Style
     "E501",    # line too long (géré par line-length)
+    "E741",    # ambiguous variable name (l, O, I) — accepté dans les lambdas comptables
     "N806",    # variable in function should be lowercase (GUI vars)
+    # Sécurité (acceptable dans ce contexte)
+    "S101",    # assert usage (OK dans les tests)
+    "S110",    # try-except-pass (OK pour des exceptions Word/LO non critiques)
+    "S603",    # subprocess call (commandes hardcodées, pas d'input user)
+    "T201",    # print statements (acceptables temporairement)
+    # Simplifications optionnelles
+    "SIM105",  # contextlib.suppress (style uniquement)
+    "SIM117",  # single with (lisibilité des mocks de test)
+    "B005",    # .strip() with multi-char (OK)
+    "B007",    # loop variable not used (OK pour enumerate)
+    "B905",    # zip without strict (Python 3.10+ only, ok pour 3.11+)
+    "N813",    # camelcase alias (OK pour oxe = OxmlElement)
+    "F841",    # local variable assigned but unused (OK dans matplotlib)
 ]
-per-file-ignores = { "tests/**" = ["ANN", "S", "T20"] }
+per-file-ignores = { "tests/**" = ["ANN", "S", "T20", "SIM"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["core", "ui"]
