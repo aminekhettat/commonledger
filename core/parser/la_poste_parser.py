@@ -41,6 +41,53 @@ logger = logging.getLogger(__name__)
 # Marqueur du format ancien avec colonne francs (2013-~2018)
 _FORMAT_SOITENFRANCS = "soitenfrancs"
 
+# Noms de mois français → numéro de mois
+# Les clés sont normalisées (Ø→e, ß→u, accents supprimés)
+_MOIS_FR = {
+    "janvier": 1, "fevrier": 2, "mars": 3, "avril": 4,
+    "mai": 5, "juin": 6, "juillet": 7, "aout": 8,
+    "septembre": 9, "octobre": 10, "novembre": 11, "decembre": 12,
+}
+
+
+def _normaliser_pdf_texte(texte: str) -> str:
+    """
+    Normalise le texte extrait d'un PDF La Banque Postale.
+
+    Supprime les références CID (ex: (cid:160) = espace insécable) et
+    corrige les artefacts d'encodage courants observés sur ces relevés :
+      - Ø (0xF8) → e  : pour fØvrier→fevrier, dØcembre→decembre
+      - ß (0xDF) → u  : pour aoßt→aout
+      - Œ (0x8C) → oe : pour ArrŒté
+
+    Args:
+        texte: Texte brut extrait par pdfplumber.
+
+    Returns:
+        Texte normalisé en minuscules.
+    """
+    t = texte.lower()
+    t = re.sub(r"\(cid:\d+\)", " ", t)   # supprimer (cid:NNN)
+    t = re.sub(r"\(cid:[0-9]+\)", " ", t)
+    import re as _re
+    t = _re.sub(r"\(cid:\d+\)", " ", t)
+    t = t.replace("\xf8", "e").replace("\xdf", "u").replace("\x8c", "oe")
+    t = t.replace("\u00f8", "e").replace("\u00df", "u")
+    # Remplacement direct des caractères
+    t = t.replace("ø", "e")   # Ø → e
+    t = t.replace("ß", "u")   # ß → u
+    t = t.replace("", "oe")  # Œ → oe
+    return t
+
+
+def _parse_mois_fr(mot: str) -> "Optional[int]":
+    """Convertit un nom de mois français (encodage toléré) en numéro."""
+    t = _normaliser_pdf_texte(mot).strip()
+    for nom, num in _MOIS_FR.items():
+        if nom in t:
+            return num
+    return None
+
 
 # ── Expressions régulières ────────────────────────────────────────────────────
 
@@ -63,11 +110,8 @@ _RE_NOUVEAU_SOLDE = re.compile(
     r"nouveau\s+solde\s+au\s+\d{2}/\d{2}/\d{4}\s+\+?\s*([\d\s ]+,\d{2})",
     re.IGNORECASE,
 )
-# Période : "Arrêté mensuel du JJ/MM/AAAA au JJ/MM/AAAA"
-_RE_PERIODE = re.compile(
-    r"arr[eê]t[eé]\s+(?:mensuel\s+)?du\s+(\d{2}/\d{2}/\d{4})\s+(?:au|à)\s+(\d{2}/\d{2}/\d{4})",
-    re.IGNORECASE,
-)
+# _RE_PERIODE ancienne supprimée : l'extraction se fait via _extraire_periode_pdf()
+# qui gère tous les formats (dates numériques ET noms de mois français encodés).
 # Numéro de compte dans le texte
 _RE_NUMERO_COMPTE = re.compile(r"(\d{7}[A-Z]\d{3})")
 
@@ -229,16 +273,8 @@ class LaPosteParser:
                     lignes = self._extraire_lignes_page(texte_page, annee_fichier, mois_fichier)
                     toutes_lignes.extend(lignes)
 
-                # Fallback période depuis le nom de fichier si non extraite du texte
-                # (nouveau format 2023+ avec dates écrites en toutes lettres dans le PDF)
-                if not releve.periode_debut and mois_fichier:
-                    try:
-                        import calendar
-                        releve.periode_debut = date(annee_fichier, mois_fichier, 1)
-                        dernier_jour = calendar.monthrange(annee_fichier, mois_fichier)[1]
-                        releve.periode_fin = date(annee_fichier, mois_fichier, dernier_jour)
-                    except ValueError:
-                        pass
+                # Note: la période est extraite uniquement du corps du PDF
+                # (voir _extraire_periode_pdf). Pas de fallback sur le nom de fichier.
 
                 # Extraire les soldes depuis le texte complet
                 self._extraire_soldes(texte_complet, releve)
@@ -258,6 +294,87 @@ class LaPosteParser:
         return releve
 
     # ── Extraction des métadonnées ────────────────────────────────────────────
+
+    def _extraire_periode_pdf(self, texte: str) -> tuple:
+        """
+        Extrait la période de couverture depuis le texte brut du PDF.
+
+        Analyse la ligne "Arrêté mensuel du ... au ..." présente sur chaque
+        relevé La Banque Postale, en gérant toutes les variantes observées
+        de 2013 à 2025 (dates numériques DD/MM/YYYY ou noms de mois français
+        avec artefacts d'encodage).
+
+        Formats observés :
+          - "ArrŒtØ mensuel du 30 dØcembre 2023(cid:160)au(cid:160)31 janvier 2024"
+          - "ArrŒtØmensuel du1(cid:160)au(cid:160)31 janvier 2025"
+          - "ArrŒtØ mensuel du 1 fØvrier(cid:160)au(cid:160)30 avril 2014"
+          - "> ArrŒtØmensuel du 31 dØcembre 2022(cid:160)au(cid:160)31 janvier 2023"
+
+        Returns:
+            Tuple (periode_debut, periode_fin) — l'un ou les deux peuvent être None.
+        """
+        texte_norm = _normaliser_pdf_texte(texte)
+
+        for ligne in texte_norm.split("\n"):
+            if "mensuel" not in ligne:
+                continue
+
+            # ── Tenter d'abord le format numérique DD/MM/YYYY ──────────────
+            # (anciens relevés)
+            m_num = re.search(
+                r"du\s+(\d{2}/\d{2}/\d{4})\s+(?:au|a)\s+(\d{2}/\d{2}/\d{4})",
+                ligne
+            )
+            if m_num:
+                d1 = _parse_date_complete(m_num.group(1))
+                d2 = _parse_date_complete(m_num.group(2))
+                if d1 and d2:
+                    return d1, d2
+
+            # ── Format texte avec noms de mois français ────────────────────
+            # Chercher la date de FIN (après "au") — toujours complète
+            m_fin = re.search(r"au\s+(\d{1,2})\s+([a-z]+)\s+(\d{4})", ligne)
+            if not m_fin:
+                continue
+
+            try:
+                jour_fin = int(m_fin.group(1))
+                mois_fin = _parse_mois_fr(m_fin.group(2))
+                annee_fin = int(m_fin.group(3))
+                if not mois_fin:
+                    continue
+                periode_fin = date(annee_fin, mois_fin, jour_fin)
+            except (ValueError, TypeError):
+                continue
+
+            # Chercher la date de DÉBUT (après "du")
+            # Cas 1 : "du DD MOIS AAAA" — début dans un mois/année différent
+            m_debut_complet = re.search(
+                r"du\s+(\d{1,2})\s+([a-z]+)\s+(\d{4})", ligne
+            )
+            if m_debut_complet:
+                try:
+                    j = int(m_debut_complet.group(1))
+                    mo = _parse_mois_fr(m_debut_complet.group(2))
+                    aa = int(m_debut_complet.group(3))
+                    if mo:
+                        return date(aa, mo, j), periode_fin
+                except (ValueError, TypeError):
+                    pass
+
+            # Cas 2 : "du D" ou "du DD" — même mois que la fin
+            m_debut_simple = re.search(r"du\s*(\d{1,2})\b", ligne)
+            if m_debut_simple:
+                try:
+                    j = int(m_debut_simple.group(1))
+                    return date(annee_fin, mois_fin, j), periode_fin
+                except ValueError:
+                    pass
+
+            # Cas 3 : début non trouvé — on prend le 1er du mois de fin
+            return date(annee_fin, mois_fin, 1), periode_fin
+
+        return None, None
 
     def _annee_depuis_nom(self, nom: str) -> int:
         """Extrait l'année depuis le nom de fichier (YYYY dans YYYY-MM-DD ou YYYYMMDD)."""
@@ -292,17 +409,28 @@ class LaPosteParser:
         return None
 
     def _extraire_metadonnees(self, texte: str, releve: ReleveInfo) -> None:
-        """Extrait le numéro de compte et la période depuis la première page."""
+        """
+        Extrait le numéro de compte et la période depuis la première page.
+
+        La période est extraite UNIQUEMENT depuis le corps du PDF, jamais
+        depuis le nom de fichier (qui peut être modifié par l'utilisateur).
+
+        Formats de la ligne d'arrêté mensuel observés :
+          - "ArrŒtØ mensuel du 30 dØcembre 2023 au 31 janvier 2024"
+          - "ArrŒtØmensuel du1(cid:160)au(cid:160)31 janvier 2025"
+          - "ArrŒtØ mensuel du 1 fØvrier(cid:160)au(cid:160)30 avril 2014"
+        """
         # Numéro de compte
         m = _RE_NUMERO_COMPTE.search(texte)
         if m:
             releve.numero_compte = m.group(1)
 
-        # Période (ex: "Arrêté mensuel du 30 décembre 2023 au 31 janvier 2024")
-        m = _RE_PERIODE.search(texte)
-        if m:
-            releve.periode_debut = _parse_date_complete(m.group(1))
-            releve.periode_fin = _parse_date_complete(m.group(2))
+        # Période — extraction depuis le texte PDF uniquement
+        debut, fin = self._extraire_periode_pdf(texte)
+        if debut:
+            releve.periode_debut = debut
+        if fin:
+            releve.periode_fin = fin
 
     def _extraire_soldes(self, texte: str, releve: ReleveInfo) -> None:
         """
