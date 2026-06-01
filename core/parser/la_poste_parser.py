@@ -229,6 +229,17 @@ class LaPosteParser:
                     lignes = self._extraire_lignes_page(texte_page, annee_fichier, mois_fichier)
                     toutes_lignes.extend(lignes)
 
+                # Fallback période depuis le nom de fichier si non extraite du texte
+                # (nouveau format 2023+ avec dates écrites en toutes lettres dans le PDF)
+                if not releve.periode_debut and mois_fichier:
+                    try:
+                        import calendar
+                        releve.periode_debut = date(annee_fichier, mois_fichier, 1)
+                        dernier_jour = calendar.monthrange(annee_fichier, mois_fichier)[1]
+                        releve.periode_fin = date(annee_fichier, mois_fichier, dernier_jour)
+                    except ValueError:
+                        pass
+
                 # Extraire les soldes depuis le texte complet
                 self._extraire_soldes(texte_complet, releve)
 
@@ -261,10 +272,23 @@ class LaPosteParser:
         return datetime.now().year
 
     def _mois_depuis_nom(self, nom: str) -> Optional[int]:
-        """Extrait le mois depuis le nom de fichier."""
+        """
+        Extrait le mois depuis le nom de fichier.
+
+        Formats supportés :
+          - YYYY-MM-DD : releve_6804150W020_2023-09-29.pdf → 9
+          - YYYYMMDD   : releve_CCP6804150W020_20230131.pdf → 1
+        """
+        # Format YYYY-MM-DD (nouveau)
         m = re.search(r"\d{4}-(\d{2})-\d{2}", nom)
         if m:
             return int(m.group(1))
+        # Format YYYYMMDD (ancien) — 8 chiffres consécutifs suivis d'un point
+        m = re.search(r"\d{4}(\d{2})\d{2}\.", nom)
+        if m:
+            val = int(m.group(1))
+            if 1 <= val <= 12:
+                return val
         return None
 
     def _extraire_metadonnees(self, texte: str, releve: ReleveInfo) -> None:
