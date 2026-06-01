@@ -25,16 +25,15 @@ Utilisation typique::
         print(t.date, t.libelle, t.montant)
 """
 
-import re
 import logging
+import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Optional
 
 import pdfplumber
 
-from .models import Transaction, ReleveInfo, ParseError
+from .models import ParseError, ReleveInfo, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +43,18 @@ _FORMAT_SOITENFRANCS = "soitenfrancs"
 # Noms de mois français → numéro de mois
 # Les clés sont normalisées (Ø→e, ß→u, accents supprimés)
 _MOIS_FR = {
-    "janvier": 1, "fevrier": 2, "mars": 3, "avril": 4,
-    "mai": 5, "juin": 6, "juillet": 7, "aout": 8,
-    "septembre": 9, "octobre": 10, "novembre": 11, "decembre": 12,
+    "janvier": 1,
+    "fevrier": 2,
+    "mars": 3,
+    "avril": 4,
+    "mai": 5,
+    "juin": 6,
+    "juillet": 7,
+    "aout": 8,
+    "septembre": 9,
+    "octobre": 10,
+    "novembre": 11,
+    "decembre": 12,
 }
 
 
@@ -67,20 +75,21 @@ def _normaliser_pdf_texte(texte: str) -> str:
         Texte normalisé en minuscules.
     """
     t = texte.lower()
-    t = re.sub(r"\(cid:\d+\)", " ", t)   # supprimer (cid:NNN)
+    t = re.sub(r"\(cid:\d+\)", " ", t)  # supprimer (cid:NNN)
     t = re.sub(r"\(cid:[0-9]+\)", " ", t)
     import re as _re
+
     t = _re.sub(r"\(cid:\d+\)", " ", t)
     t = t.replace("\xf8", "e").replace("\xdf", "u").replace("\x8c", "oe")
     t = t.replace("\u00f8", "e").replace("\u00df", "u")
     # Remplacement direct des caractères
-    t = t.replace("ø", "e")   # Ø → e
-    t = t.replace("ß", "u")   # ß → u
+    t = t.replace("ø", "e")  # Ø → e
+    t = t.replace("ß", "u")  # ß → u
     t = t.replace("", "oe")  # Œ → oe
     return t
 
 
-def _parse_mois_fr(mot: str) -> "Optional[int]":
+def _parse_mois_fr(mot: str) -> "int | None":
     """Convertit un nom de mois français (encodage toléré) en numéro."""
     t = _normaliser_pdf_texte(mot).strip()
     for nom, num in _MOIS_FR.items():
@@ -116,7 +125,7 @@ _RE_NOUVEAU_SOLDE = re.compile(
 _RE_NUMERO_COMPTE = re.compile(r"(\d{7}[A-Z]\d{3})")
 
 
-def _parse_montant(texte: str) -> Optional[Decimal]:
+def _parse_montant(texte: str) -> Decimal | None:
     """
     Convertit une chaîne montant français en Decimal.
 
@@ -140,7 +149,7 @@ def _parse_montant(texte: str) -> Optional[Decimal]:
         return None
 
 
-def _parse_date_complete(texte: str) -> Optional[date]:
+def _parse_date_complete(texte: str) -> date | None:
     """Parse une date DD/MM/YYYY."""
     m = _RE_DATE_COMPLETE.search(texte)
     if m:
@@ -321,10 +330,7 @@ class LaPosteParser:
 
             # ── Tenter d'abord le format numérique DD/MM/YYYY ──────────────
             # (anciens relevés)
-            m_num = re.search(
-                r"du\s+(\d{2}/\d{2}/\d{4})\s+(?:au|a)\s+(\d{2}/\d{2}/\d{4})",
-                ligne
-            )
+            m_num = re.search(r"du\s+(\d{2}/\d{2}/\d{4})\s+(?:au|a)\s+(\d{2}/\d{2}/\d{4})", ligne)
             if m_num:
                 d1 = _parse_date_complete(m_num.group(1))
                 d2 = _parse_date_complete(m_num.group(2))
@@ -349,9 +355,7 @@ class LaPosteParser:
 
             # Chercher la date de DÉBUT (après "du")
             # Cas 1 : "du DD MOIS AAAA" — début dans un mois/année différent
-            m_debut_complet = re.search(
-                r"du\s+(\d{1,2})\s+([a-z]+)\s+(\d{4})", ligne
-            )
+            m_debut_complet = re.search(r"du\s+(\d{1,2})\s+([a-z]+)\s+(\d{4})", ligne)
             if m_debut_complet:
                 try:
                     j = int(m_debut_complet.group(1))
@@ -388,7 +392,7 @@ class LaPosteParser:
             return int(m.group(1))
         return datetime.now().year
 
-    def _mois_depuis_nom(self, nom: str) -> Optional[int]:
+    def _mois_depuis_nom(self, nom: str) -> int | None:
         """
         Extrait le mois depuis le nom de fichier.
 
@@ -465,9 +469,7 @@ class LaPosteParser:
 
     # ── Extraction des transactions ────────────────────────────────────────────
 
-    def _extraire_lignes_page(
-        self, texte: str, annee: int, mois_fichier: Optional[int]
-    ) -> list[dict]:
+    def _extraire_lignes_page(self, texte: str, annee: int, mois_fichier: int | None) -> list[dict]:
         """
         Extrait les lignes de transaction depuis le texte brut d'une page.
 
@@ -544,12 +546,14 @@ class LaPosteParser:
             libelle_final = " ".join(p for p in libelle_parts if p).strip()
 
             if debit is not None or credit is not None:
-                resultats.append({
-                    "date": tx_date,
-                    "libelle": libelle_final,
-                    "debit": debit,
-                    "credit": credit,
-                })
+                resultats.append(
+                    {
+                        "date": tx_date,
+                        "libelle": libelle_final,
+                        "debit": debit,
+                        "credit": credit,
+                    }
+                )
 
             i = j
 
@@ -558,18 +562,27 @@ class LaPosteParser:
     def _est_ligne_ignoree(self, ligne: str) -> bool:
         """Retourne True pour les lignes à ignorer (en-têtes, totaux, pieds de page)."""
         mots_cles_ignore = [
-            "TOTAL DES OPERATIONS", "TOTALDESOP", "Date Opération Débit",
-            "Date Op", "DØbit", "CrØdit", "Page ", "LA BANQUE POSTALE",
-            "Ancien solde", "Nouveau solde", "ArrŒtØ", "TVA sur",
-            "Pour faire opposition", "Garantie de vos",
-            "Vos opérations CCP", "Vos opérations",
+            "TOTAL DES OPERATIONS",
+            "TOTALDESOP",
+            "Date Opération Débit",
+            "Date Op",
+            "DØbit",
+            "CrØdit",
+            "Page ",
+            "LA BANQUE POSTALE",
+            "Ancien solde",
+            "Nouveau solde",
+            "ArrŒtØ",
+            "TVA sur",
+            "Pour faire opposition",
+            "Garantie de vos",
+            "Vos opérations CCP",
+            "Vos opérations",
         ]
         ligne_upper = ligne.upper()
         return any(mot.upper() in ligne_upper for mot in mots_cles_ignore)
 
-    def _extraire_montants(
-        self, texte: str
-    ) -> tuple[Optional[Decimal], Optional[Decimal], str]:
+    def _extraire_montants(self, texte: str) -> tuple[Decimal | None, Decimal | None, str]:
         """
         Extrait le montant débit et/ou crédit depuis la fin d'une ligne de transaction.
 
@@ -582,9 +595,7 @@ class LaPosteParser:
         """
         # Pattern : un ou deux montants en fin de chaîne
         # Montant = chiffres avec espaces optionnels + virgule + 2 chiffres
-        pattern = re.compile(
-            r"\s+(\d{1,3}(?:[\s \xa0]\d{3}){0,3},\d{2})\s*$"
-        )
+        pattern = re.compile(r"\s+(\d{1,3}(?:[\s \xa0]\d{3}){0,3},\d{2})\s*$")
 
         montants_trouves = []
         texte_restant = texte
@@ -597,7 +608,7 @@ class LaPosteParser:
             val = _parse_montant(m.group(1))
             if val is not None and val > 0:
                 montants_trouves.insert(0, val)
-                texte_restant = texte_restant[:m.start()]
+                texte_restant = texte_restant[: m.start()]
             else:
                 break
 
@@ -639,20 +650,28 @@ class LaPosteParser:
             "CREDIT CARTE BANCAIRE",  # Remboursement sur carte bancaire
             "AVOIR",  # Avoir ou remboursement
             "VIREMENT INSTANTANE DE",  # Virement reçu d'une personne physique
-            "VIREMENT DE",             # "VIREMENT DE STRIPE", "VIREMENT DE MME..."
+            "VIREMENT DE",  # "VIREMENT DE STRIPE", "VIREMENT DE MME..."
             "VIREMENT RECU",
             "REMISE DE CHEQUES",
-            "VERSEMENT CARTE", "VERSEMENT DAB", "VERSEMENT ESPECES", "VERSEMENT EFFECTUE",
-            "STRIPE", "HELLOASSO",
-            "WEEZEVENT", "WOOPAYMENTS",
-                    ]
+            "VERSEMENT CARTE",
+            "VERSEMENT DAB",
+            "VERSEMENT ESPECES",
+            "VERSEMENT EFFECTUE",
+            "STRIPE",
+            "HELLOASSO",
+            "WEEZEVENT",
+            "WOOPAYMENTS",
+        ]
         marqueurs_debit = [
-            "VIREMENT INSTANTANE A",   # Virement envoyé à une personne/société
-            "PRELEVEMENT DE", "PRELEVEMENT SEPA",
-            "VIREMENT POUR",           # "VIREMENT POUR REGIE DE LA MAIRIE..."
+            "VIREMENT INSTANTANE A",  # Virement envoyé à une personne/société
+            "PRELEVEMENT DE",
+            "PRELEVEMENT SEPA",
+            "VIREMENT POUR",  # "VIREMENT POUR REGIE DE LA MAIRIE..."
             "VIREMENT EMIS",
-            "ACHAT CB", "PAIEMENT CB",
-            "COTISATION ADISPO", "FRAIS",
+            "ACHAT CB",
+            "PAIEMENT CB",
+            "COTISATION ADISPO",
+            "FRAIS",
         ]
         for m in marqueurs_credit:
             if m in libelle_upper:
@@ -663,9 +682,7 @@ class LaPosteParser:
         # Par défaut : débit (plus fréquent pour les opérations ambiguës)
         return False
 
-    def _construire_transactions(
-        self, lignes: list[dict], nom_fichier: str
-    ) -> list[Transaction]:
+    def _construire_transactions(self, lignes: list[dict], nom_fichier: str) -> list[Transaction]:
         """
         Convertit les lignes extraites en objets Transaction dédupliqués.
 
@@ -731,7 +748,8 @@ class LaPosteParser:
         releves = []
         # Ignorer les fichiers dupliques comme "releve_2025-05-30 (1).pdf"
         pdfs_uniques = sorted(
-            p for p in dossier.glob("*.pdf")
+            p
+            for p in dossier.glob("*.pdf")
             if not re.search(r" \(\d+\)\.pdf$", p.name, re.IGNORECASE)
         )
         for pdf in pdfs_uniques:

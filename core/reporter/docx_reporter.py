@@ -12,24 +12,23 @@ Améliorations de mise en page :
 """
 
 from __future__ import annotations
+
 import logging
 import subprocess
 import sys
 from datetime import date
-from decimal import Decimal
 from pathlib import Path
-from typing import Optional
 
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION
-from docx.oxml.ns import qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm, Inches, Pt, RGBColor
 
-from ..accounting.compte_resultat import CompteResultat, LigneResultat
 from ..accounting.analytique import BilanProjet
-from .graphiques import GraphiquesMaker, MOIS_FR
+from ..accounting.compte_resultat import CompteResultat
+from .graphiques import GraphiquesMaker
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +36,21 @@ logger = logging.getLogger(__name__)
 # ── Dates en français ────────────────────────────────────────────────────────
 
 _MOIS_LONGS = [
-    "", "janvier", "février", "mars", "avril", "mai", "juin",
-    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+    "",
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
 ]
+
 
 def _date_fr(d) -> str:
     """Formate une date en français : '31 janvier 2024'."""
@@ -47,6 +58,7 @@ def _date_fr(d) -> str:
 
 
 # ── Helpers couleurs ──────────────────────────────────────────────────────────
+
 
 def _rgb(hex_color: str) -> RGBColor:
     h = hex_color.lstrip("#")
@@ -58,6 +70,7 @@ def _hex_fill(hex_color: str) -> str:
 
 
 # ── Helpers OxmlElement ───────────────────────────────────────────────────────
+
 
 def _cell_background(cell, hex_color: str) -> None:
     """Définit la couleur de fond d'une cellule."""
@@ -119,6 +132,7 @@ def _add_page_number_field(para) -> None:
 
 # ── Classe principale ─────────────────────────────────────────────────────────
 
+
 class DocxReporter:
     """
     Génère le rapport comptable au format Word (.docx).
@@ -156,8 +170,8 @@ class DocxReporter:
         self,
         compte_resultat: CompteResultat,
         chemin_sortie: str,
-        bilans_projets: Optional[list[BilanProjet]] = None,
-        titre_rapport: Optional[str] = None,
+        bilans_projets: list[BilanProjet] | None = None,
+        titre_rapport: str | None = None,
         bilan=None,  # objet Bilan (core.accounting.bilan.Bilan)
     ) -> str:
         cr = compte_resultat
@@ -166,10 +180,7 @@ class DocxReporter:
             if d.month == 1 and f.month == 12 and d.year == f.year:
                 titre_rapport = f"Rapport annuel {d.year}"
             else:
-                titre_rapport = (
-                    f"Rapport du {d.strftime('%d/%m/%Y')} "
-                    f"au {f.strftime('%d/%m/%Y')}"
-                )
+                titre_rapport = f"Rapport du {d.strftime('%d/%m/%Y')} au {f.strftime('%d/%m/%Y')}"
 
         doc = Document()
         self._definir_styles(doc)
@@ -180,19 +191,19 @@ class DocxReporter:
         # ── Section 1 : Page de garde (première page différente) ──────────────
         section1 = doc.sections[0]
         section1.different_first_page_header_footer = True
-        section1.top_margin    = Cm(0)
+        section1.top_margin = Cm(0)
         section1.bottom_margin = Cm(2)
-        section1.left_margin   = Cm(2.5)
-        section1.right_margin  = Cm(2.5)
+        section1.left_margin = Cm(2.5)
+        section1.right_margin = Cm(2.5)
         self._page_de_garde(doc, titre_rapport, cr)
 
         # ── Section 2 : Corps du document (en-tête actif) ─────────────────────
         doc.add_section(WD_SECTION.NEW_PAGE)
         section2 = doc.sections[-1]
-        section2.top_margin    = Cm(3.5)  # Espace pour l'en-tête
+        section2.top_margin = Cm(3.5)  # Espace pour l'en-tête
         section2.bottom_margin = Cm(2.5)
-        section2.left_margin   = Cm(2.5)
-        section2.right_margin  = Cm(2.5)
+        section2.left_margin = Cm(2.5)
+        section2.right_margin = Cm(2.5)
 
         # Configurer l'en-tête de la section 2
         self._configurer_entete(section2, titre_rapport)
@@ -242,7 +253,7 @@ class DocxReporter:
 
     def _definir_styles(self, doc: Document) -> None:
         """Configure les styles de titre Word pour le TOC."""
-        from docx.enum.style import WD_STYLE_TYPE
+
         styles = doc.styles
         # Titre 1 — sections principales
         try:
@@ -251,7 +262,7 @@ class DocxReporter:
             s1.font.bold = True
             s1.font.color.rgb = _rgb(self.cp)
             s1.paragraph_format.space_before = Pt(14)
-            s1.paragraph_format.space_after  = Pt(6)
+            s1.paragraph_format.space_after = Pt(6)
         except KeyError:
             pass
         # Titre 2 — sous-sections
@@ -261,7 +272,7 @@ class DocxReporter:
             s2.font.bold = True
             s2.font.color.rgb = _rgb(self.cp)
             s2.paragraph_format.space_before = Pt(10)
-            s2.paragraph_format.space_after  = Pt(4)
+            s2.paragraph_format.space_after = Pt(4)
         except KeyError:
             pass
 
@@ -284,7 +295,7 @@ class DocxReporter:
         # Ligne 1 : logo (gauche) + nom asso (centre)
         p_h = header.paragraphs[0]
         p_h.paragraph_format.space_before = Pt(0)
-        p_h.paragraph_format.space_after  = Pt(2)
+        p_h.paragraph_format.space_after = Pt(2)
 
         logo = self.config.get("logo_chemin", "")
         if logo and Path(logo).exists():
@@ -304,7 +315,7 @@ class DocxReporter:
         # Ligne séparatrice colorée sous l'en-tête
         p_sep = header.add_paragraph()
         p_sep.paragraph_format.space_before = Pt(2)
-        p_sep.paragraph_format.space_after  = Pt(0)
+        p_sep.paragraph_format.space_after = Pt(0)
         pPr = p_sep._p.get_or_add_pPr()
         pBdr = OxmlElement("w:pBdr")
         bottom = OxmlElement("w:bottom")
@@ -325,7 +336,7 @@ class DocxReporter:
         # Ligne séparatrice au-dessus du pied
         p_fsep = footer.paragraphs[0]
         p_fsep.paragraph_format.space_before = Pt(0)
-        p_fsep.paragraph_format.space_after  = Pt(3)
+        p_fsep.paragraph_format.space_after = Pt(3)
         pPr2 = p_fsep._p.get_or_add_pPr()
         pBdr2 = OxmlElement("w:pBdr")
         top_b = OxmlElement("w:top")
@@ -350,6 +361,7 @@ class DocxReporter:
 
         # Tab stop droite à 15,5 cm
         from docx.oxml import OxmlElement as oxe
+
         pPr_num = p_num._p.get_or_add_pPr()
         tabs = oxe("w:tabs")
         tab = oxe("w:tab")
@@ -373,7 +385,7 @@ class DocxReporter:
         p_logo = cell_top.paragraphs[0]
         p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_logo.paragraph_format.space_before = Pt(20)
-        p_logo.paragraph_format.space_after  = Pt(20)
+        p_logo.paragraph_format.space_after = Pt(20)
         logo = self.config.get("logo_chemin", "")
         if logo and Path(logo).exists():
             p_logo.add_run().add_picture(logo, height=Cm(3.5))
@@ -416,7 +428,7 @@ class DocxReporter:
         p_t = cell_titre.paragraphs[0]
         p_t.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_t.paragraph_format.space_before = Pt(14)
-        p_t.paragraph_format.space_after  = Pt(14)
+        p_t.paragraph_format.space_after = Pt(14)
         run_t = p_t.add_run(titre)
         run_t.font.size = Pt(24)
         run_t.font.bold = True
@@ -427,12 +439,17 @@ class DocxReporter:
         # Récapitulatif financier (tableau centré)
         table_kpi = doc.add_table(rows=3, cols=2)
         table_kpi.style = "Table Grid"
-        table_kpi.alignment = WD_TABLE_ALIGNMENT.CENTER if hasattr(
-            __import__('docx').enum.table, 'WD_TABLE_ALIGNMENT') else 1
+        table_kpi.alignment = (
+            WD_TABLE_ALIGNMENT.CENTER
+            if hasattr(__import__("docx").enum.table, "WD_TABLE_ALIGNMENT")
+            else 1
+        )
 
         kpis = [
-            ("Période analysée",
-             f"{cr.date_debut.strftime('%d/%m/%Y')} → {cr.date_fin.strftime('%d/%m/%Y')}"),
+            (
+                "Période analysée",
+                f"{cr.date_debut.strftime('%d/%m/%Y')} → {cr.date_fin.strftime('%d/%m/%Y')}",
+            ),
             ("Total recettes", f"{cr.total_recettes:,.2f} €"),
             ("Total dépenses", f"{cr.total_depenses:,.2f} €"),
         ]
@@ -460,9 +477,13 @@ class DocxReporter:
         run_res_l.font.size = Pt(12)
 
         signe = "+" if cr.est_excedentaire else ""
-        run_res_v = row_res.cells[1].paragraphs[0].add_run(
-            f"{signe}{cr.resultat_net:,.2f} €  "
-            + ("✓ Excédent" if cr.est_excedentaire else "⚠ Déficit")
+        run_res_v = (
+            row_res.cells[1]
+            .paragraphs[0]
+            .add_run(
+                f"{signe}{cr.resultat_net:,.2f} €  "
+                + ("✓ Excédent" if cr.est_excedentaire else "⚠ Déficit")
+            )
         )
         run_res_v.font.size = Pt(12)
         run_res_v.font.bold = True
@@ -478,7 +499,9 @@ class DocxReporter:
         p_legal.alignment = WD_ALIGN_PARAGRAPH.CENTER
         infos_legales = []
         for label, cle in [
-            ("SIRET", "siret"), ("APE", "code_ape"), ("Waldec", "numero_waldec"),
+            ("SIRET", "siret"),
+            ("APE", "code_ape"),
+            ("Waldec", "numero_waldec"),
             ("Site", "site_web"),
         ]:
             val = self.config.get(cle, "")
@@ -492,9 +515,7 @@ class DocxReporter:
         doc.add_paragraph()
         p_gen = doc.add_paragraph()
         p_gen.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_gen = p_gen.add_run(
-            f"Document généré le {_date_fr(date.today())} — CommonLedger"
-        )
+        run_gen = p_gen.add_run(f"Document généré le {_date_fr(date.today())} — CommonLedger")
         run_gen.font.size = Pt(8)
         run_gen.font.italic = True
         run_gen.font.color.rgb = RGBColor(150, 150, 150)
@@ -525,14 +546,22 @@ class DocxReporter:
 
         champs = [
             ("Type de structure", "type_structure"),
-            ("Nom complet", "nom"), ("Sigle", "sigle"),
-            ("Adresse", "adresse"), ("Code postal", "code_postal"),
-            ("Ville", "ville"), ("Email", "email"),
-            ("Téléphone", "telephone"), ("Site web", "site_web"),
-            ("SIRET", "siret"), ("Code APE/NAF", "code_ape"),
+            ("Nom complet", "nom"),
+            ("Sigle", "sigle"),
+            ("Adresse", "adresse"),
+            ("Code postal", "code_postal"),
+            ("Ville", "ville"),
+            ("Email", "email"),
+            ("Téléphone", "telephone"),
+            ("Site web", "site_web"),
+            ("SIRET", "siret"),
+            ("Code APE/NAF", "code_ape"),
             ("N° Waldec (RNA)", "numero_waldec"),
-            ("Banque", "banque"), ("IBAN", "iban"), ("BIC", "bic"),
-            ("Président(e)", "president"), ("Trésorier(ère)", "tresorier"),
+            ("Banque", "banque"),
+            ("IBAN", "iban"),
+            ("BIC", "bic"),
+            ("Président(e)", "president"),
+            ("Trésorier(ère)", "tresorier"),
         ]
 
         table = doc.add_table(rows=0, cols=2)
@@ -582,14 +611,10 @@ class DocxReporter:
         run_l.font.color.rgb = RGBColor(255, 255, 255)
 
         signe = "+" if cr.est_excedentaire else ""
-        run_v = table_res.rows[0].cells[1].paragraphs[0].add_run(
-            f"{signe}{cr.resultat_net:,.2f} €"
-        )
+        run_v = table_res.rows[0].cells[1].paragraphs[0].add_run(f"{signe}{cr.resultat_net:,.2f} €")
         run_v.font.bold = True
         run_v.font.size = Pt(13)
-        run_v.font.color.rgb = (
-            RGBColor(0, 128, 0) if cr.est_excedentaire else RGBColor(180, 0, 0)
-        )
+        run_v.font.color.rgb = RGBColor(0, 128, 0) if cr.est_excedentaire else RGBColor(180, 0, 0)
         table_res.rows[0].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
         if cr.transactions_non_categorisees:
@@ -720,9 +745,7 @@ class DocxReporter:
         for ligne in toutes:
             if not ligne.transactions:
                 continue
-            doc.add_heading(
-                f"{ligne.label} — {float(ligne.montant):,.2f} €", level=2
-            )
+            doc.add_heading(f"{ligne.label} — {float(ligne.montant):,.2f} €", level=2)
             table = doc.add_table(rows=1, cols=3)
             table.style = "Table Grid"
             for j, titre in enumerate(["Date", "Libellé", "Montant (€)"]):
@@ -738,9 +761,7 @@ class DocxReporter:
                 if idx % 2 == 0:
                     for c in row.cells:
                         _cell_background(c, self.cs)
-                row.cells[0].paragraphs[0].add_run(
-                    t.date.strftime("%d/%m/%Y")
-                ).font.size = Pt(9)
+                row.cells[0].paragraphs[0].add_run(t.date.strftime("%d/%m/%Y")).font.size = Pt(9)
                 libelle = t.libelle[:80] + ("…" if len(t.libelle) > 80 else "")
                 if t.memo:
                     libelle += f" ({t.memo})"
@@ -760,14 +781,11 @@ class DocxReporter:
         Conforme aux exigences du Plan Comptable des Associations (ANC 2018-06)
         pour la comptabilité simplifiée (structures de moins de 3 M€ de produits).
         """
-        from decimal import Decimal
 
         doc.add_heading("6. Bilan comptable simplifié", level=1)
 
         type_struct = self.config.get("type_structure", "Association loi 1901")
-        p_info = doc.add_paragraph(
-            f"{type_struct} — Bilan au {_date_fr(bilan.date_cloture)}"
-        )
+        p_info = doc.add_paragraph(f"{type_struct} — Bilan au {_date_fr(bilan.date_cloture)}")
         p_info.runs[0].font.italic = True
         p_info.runs[0].font.size = Pt(10)
         doc.add_paragraph()
@@ -787,7 +805,7 @@ class DocxReporter:
             run.font.size = Pt(10)
             cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        lignes_actif  = bilan.lignes_actif()
+        lignes_actif = bilan.lignes_actif()
         lignes_passif = bilan.lignes_passif()
         nb_rows = max(len(lignes_actif), len(lignes_passif))
 
@@ -838,8 +856,7 @@ class DocxReporter:
             p_eq.runs[0].font.size = Pt(9)
         else:
             p_eq = doc.add_paragraph(
-                f"⚠ Écart de {float(bilan.ecart_equilibre):+.2f} € — "
-                f"vérifiez les données saisies."
+                f"⚠ Écart de {float(bilan.ecart_equilibre):+.2f} € — vérifiez les données saisies."
             )
             p_eq.runs[0].font.color.rgb = RGBColor(180, 0, 0)
             p_eq.runs[0].font.size = Pt(9)
@@ -849,7 +866,7 @@ class DocxReporter:
             "Note : Bilan établi conformément au Plan Comptable des Associations "
             f"(règlement ANC 2018-06), comptabilité simplifiée. "
             f"Dotation aux amortissements de l'exercice : "
-            f"{float(bilan.immobilisations_nettes) if hasattr(bilan,'immobilisations_nettes') else 0:.2f} €."
+            f"{float(bilan.immobilisations_nettes) if hasattr(bilan, 'immobilisations_nettes') else 0:.2f} €."
         )
         p_note.runs[0].font.size = Pt(8)
         p_note.runs[0].font.italic = True
@@ -917,7 +934,7 @@ class DocxReporter:
 
     # ── Conversion PDF ────────────────────────────────────────────────────────
 
-    def convertir_en_pdf(self, chemin_docx: str) -> Optional[str]:
+    def convertir_en_pdf(self, chemin_docx: str) -> str | None:
         """Convertit le Word en PDF via Word COM (Windows) ou LibreOffice."""
         chemin_docx = Path(chemin_docx)
         chemin_pdf = chemin_docx.with_suffix(".pdf")
@@ -932,8 +949,9 @@ class DocxReporter:
             logger.error(f"LibreOffice: {e}")
         return None
 
-    def _convertir_word_com(self, src: Path, dst: Path) -> str:
+    def _convertir_word_com(self, src: Path, dst: Path) -> str:  # pragma: no cover
         import comtypes.client
+
         word = comtypes.client.CreateObject("Word.Application")
         word.Visible = False
         try:
@@ -952,13 +970,22 @@ class DocxReporter:
             word.Quit()
         return str(dst)
 
-    def _convertir_libreoffice(self, src: Path, dst: Path) -> str:
+    def _convertir_libreoffice(self, src: Path, dst: Path) -> str:  # pragma: no cover
         for cmd in ["libreoffice", "soffice"]:
             try:
                 subprocess.run(
-                    [cmd, "--headless", "--convert-to", "pdf",
-                     "--outdir", str(src.parent), str(src)],
-                    check=True, capture_output=True, timeout=60,
+                    [
+                        cmd,
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        str(src.parent),
+                        str(src),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    timeout=60,
                 )
                 return str(dst)
             except (subprocess.CalledProcessError, FileNotFoundError):
