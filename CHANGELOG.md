@@ -1,7 +1,23 @@
 # CHANGELOG
 
 
+## v0.1.2 (2026-06-01)
+
+### Chores
+
+- Apply ruff auto-fixes to all source files
+  ([`b6b8168`](https://github.com/aminekhettat/commonledger/commit/b6b8168064f823b714839cf23ec57d8ba620c466))
+
+- Ruff config - ignore non-blocking style warnings for alpha phase
+  ([`db0a31a`](https://github.com/aminekhettat/commonledger/commit/db0a31a7ce86363a3ccaf019588efcd53705f7c3))
+
+
 ## v0.1.1 (2026-06-01)
+
+### Chores
+
+- **release**: V0.1.1 [skip ci]
+  ([`443bc46`](https://github.com/aminekhettat/commonledger/commit/443bc463970e1121971403fcde8b30bf358cfc79))
 
 ### Testing
 
