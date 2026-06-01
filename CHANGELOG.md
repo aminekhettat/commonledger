@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.3 (2026-06-01)
+
+### Bug Fixes
+
+- Mypy 0 errors, parser coverage 45%->86%, total 89% (209 tests)
+  ([`e1f9826`](https://github.com/aminekhettat/commonledger/commit/e1f98262022f3e23c25f74cea1397898a8275a44))
+
+
 ## v0.1.2 (2026-06-01)
 
 ### Chores
@@ -10,6 +18,9 @@
 
 - Ruff config - ignore non-blocking style warnings for alpha phase
   ([`db0a31a`](https://github.com/aminekhettat/commonledger/commit/db0a31a7ce86363a3ccaf019588efcd53705f7c3))
+
+- **release**: V0.1.2 [skip ci]
+  ([`e1ff320`](https://github.com/aminekhettat/commonledger/commit/e1ff3202299465339432894f93b5b7e8283ba74f))
 
 
 ## v0.1.1 (2026-06-01)
