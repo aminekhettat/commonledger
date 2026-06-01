@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.1 (2026-06-01)
+
+### Testing
+
+- 185 tests, 77 coverage - complete test suite
+  ([`6bae253`](https://github.com/aminekhettat/commonledger/commit/6bae2531650bdbeb8d2ae9ef3fabd89d7d21fa3d))
+
+
 ## v0.1.0 (2026-06-01)
 
 ### Bug Fixes
@@ -21,6 +29,9 @@
 
 - Update .gitignore - exclude debug scripts and audit files
   ([`59d4c65`](https://github.com/aminekhettat/commonledger/commit/59d4c6599b0ba81fe4393cc7d603b60926ef8f45))
+
+- **release**: V0.1.0 [skip ci]
+  ([`5c30bf7`](https://github.com/aminekhettat/commonledger/commit/5c30bf73861a4792d740cc7200b295b91d6bd138))
 
 ### Continuous Integration
 
