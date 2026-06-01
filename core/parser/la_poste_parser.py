@@ -38,6 +38,9 @@ from .models import Transaction, ReleveInfo, ParseError
 
 logger = logging.getLogger(__name__)
 
+# Marqueur du format ancien avec colonne francs (2013-~2018)
+_FORMAT_SOITENFRANCS = "soitenfrancs"
+
 
 # ── Expressions régulières ────────────────────────────────────────────────────
 
@@ -355,6 +358,13 @@ class LaPosteParser:
             mois = int(m_date.group(2))
             premiere_ligne_contenu = m_date.group(3).strip()
 
+            # Format Soitenfrancs (2013-~2018): strip valeur en francs
+            # Ex: "31,80 - 208,59" -> "31,80"  (208,59 = 31,80 x 6.55957 FRF)
+            if _FORMAT_SOITENFRANCS in texte.lower().replace(" ", ""):
+                premiere_ligne_contenu = re.sub(
+                    r"\s+[-+]\s+[\d\s\xa0 ]+,\d{2}\s*$", "", premiere_ligne_contenu
+                ).strip()
+
             try:
                 tx_date = date(annee, mois, jour)
             except ValueError:
@@ -420,7 +430,9 @@ class LaPosteParser:
         """
         # Pattern : un ou deux montants en fin de chaîne
         # Montant = chiffres avec espaces optionnels + virgule + 2 chiffres
-        pattern = re.compile(r"\s+([\d\s ]+,\d{2})\s*$")
+        pattern = re.compile(
+            r"\s+(\d{1,3}(?:[\s \xa0]\d{3}){0,3},\d{2})\s*$"
+        )
 
         montants_trouves = []
         texte_restant = texte
@@ -471,15 +483,17 @@ class LaPosteParser:
         marqueurs_credit = [
             # Tester les plus spécifiques EN PREMIER (éviter "VIREMENT DE"
             # de matcher "VIREMENT INSTANTANE A" via sous-chaîne)
+            "ANNULATION PRELEVEMENT",  # Annulation d'un prelevement = remboursement
+            "CREDIT CARTE BANCAIRE",  # Remboursement sur carte bancaire
+            "AVOIR",  # Avoir ou remboursement
             "VIREMENT INSTANTANE DE",  # Virement reçu d'une personne physique
             "VIREMENT DE",             # "VIREMENT DE STRIPE", "VIREMENT DE MME..."
             "VIREMENT RECU",
             "REMISE DE CHEQUES",
-            "VERSEMENT CARTE", "VERSEMENT DAB", "VERSEMENT ESPECES",
+            "VERSEMENT CARTE", "VERSEMENT DAB", "VERSEMENT ESPECES", "VERSEMENT EFFECTUE",
             "STRIPE", "HELLOASSO",
             "WEEZEVENT", "WOOPAYMENTS",
-            "AVOIR",
-        ]
+                    ]
         marqueurs_debit = [
             "VIREMENT INSTANTANE A",   # Virement envoyé à une personne/société
             "PRELEVEMENT DE", "PRELEVEMENT SEPA",
@@ -536,9 +550,15 @@ class LaPosteParser:
                 source_fichier=nom_fichier,
             )
 
-            if t.id_unique not in ids_vus:
-                ids_vus.add(t.id_unique)
-                transactions.append(t)
+            # Permettre de vrais doublons (ex: 2 cheques meme montant meme jour)
+            # On ajoute un suffixe numerique pour les distinguer
+            original_id = t.id_unique
+            counter = 0
+            while t.id_unique in ids_vus:
+                counter += 1
+                t.id_unique = f"{original_id}_{counter}"
+            ids_vus.add(t.id_unique)
+            transactions.append(t)
 
         return sorted(transactions, key=lambda x: x.date)
 
@@ -557,7 +577,12 @@ class LaPosteParser:
             raise NotADirectoryError(f"Dossier introuvable : {chemin_dossier}")
 
         releves = []
-        for pdf in sorted(dossier.glob("*.pdf")):
+        # Ignorer les fichiers dupliques comme "releve_2025-05-30 (1).pdf"
+        pdfs_uniques = sorted(
+            p for p in dossier.glob("*.pdf")
+            if not re.search(r" \(\d+\)\.pdf$", p.name, re.IGNORECASE)
+        )
+        for pdf in pdfs_uniques:
             try:
                 releve = self.parser_fichier(str(pdf))
                 releves.append(releve)
