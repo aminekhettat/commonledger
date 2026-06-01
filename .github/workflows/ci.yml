@@ -140,6 +140,7 @@ jobs:
             "SECURITY.md"
             "LICENSE"
             "docs/manuel_utilisateur.html"
+            "requirements-dev.txt"
           )
           missing=0
           for f in "${files[@]}"; do

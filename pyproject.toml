@@ -225,6 +225,15 @@ module = ["core.reporter.docx_reporter"]
 ignore_errors = true
 
 # ── Bandit (sécurité) ─────────────────────────────────────────────────────────
+# ── pdoc (génération de documentation API) ────────────────────────────────────
+# Commande : pdoc --output-dir docs/api --docformat google core
+# Résultat  : docs/api/core/*.html — documentation navigable et indexée
+# Note      : docs/api/ est dans .gitignore (generé à chaque build CI)
+#             La doc live sera publiée sur GitHub Pages via le workflow docs.yml
+[tool.pdoc]
+# Format des docstrings dans le code source
+docformat = "google"
+
 [tool.bandit]
 exclude_dirs = ["tests", "ui", "config/assets"]
 skips = ["B101", "B603", "B607"]  # assert, subprocess, shell=True autorisés

@@ -74,6 +74,51 @@ main          ← releases uniquement (CI/CD + versioning auto)
 5. Après review, merge dans `develop`
 6. Merge `develop` → `main` déclenche le release automatique
 
+## Documentation API
+
+Le projet utilise **[pdoc](https://pdoc.dev)** pour générer la documentation API
+depuis les docstrings (style Google) du code source.
+
+```bash
+# Générer la doc en local → ouvre dans le navigateur
+pdoc --docformat google core
+
+# Générer en fichiers HTML statiques
+pdoc --output-dir docs/api --docformat google core
+
+# Ouvrir la doc générée
+start docs/api/core/accounting.html   # Windows
+```
+
+La documentation live est publiée automatiquement sur **GitHub Pages**
+à chaque push sur `main` via le workflow `.github/workflows/docs.yml`.
+
+### Règles de documentation
+
+Toutes les fonctions et classes publiques **doivent** avoir une docstring :
+
+```python
+def ma_fonction(param: str) -> int:
+    """
+    Description courte sur une ligne.
+
+    Description longue optionnelle sur plusieurs lignes.
+
+    Args:
+        param: Description du paramètre.
+
+    Returns:
+        Description de la valeur de retour.
+
+    Raises:
+        ValueError: Si param est vide.
+
+    Example:
+        >>> ma_fonction("test")
+        42
+    """
+```
+
 ## Tests
 
 ```bash
