@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CommonLedger — Manuel d'utilisation</title>
+  <style>
+    :root {
+      --bleu: #1a3a5c;
+      --bleu-clair: #e8f0f7;
+      --vert: #27ae60;
+      --orange: #e67e22;
+      --rouge: #e74c3c;
+      --gris: #6c757d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #2c2c2c;
+      background: #f9f9f9;
+    }
+    /* Navigation latérale */
+    nav {
+      position: fixed; top: 0; left: 0;
+      width: 260px; height: 100vh;
+      background: var(--bleu);
+      overflow-y: auto;
+      padding: 20px 0;
+      z-index: 100;
+    }
+    nav .nav-title {
+      color: white; font-size: 18px; font-weight: bold;
+      padding: 0 20px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      margin-bottom: 12px;
+    }
+    nav .nav-version {
+      color: rgba(255,255,255,0.6); font-size: 12px;
+      padding: 0 20px 12px;
+    }
+    nav a {
+      display: block; padding: 8px 20px;
+      color: rgba(255,255,255,0.85); text-decoration: none;
+      font-size: 14px; border-left: 3px solid transparent;
+    }
+    nav a:hover, nav a:focus {
+      background: rgba(255,255,255,0.1);
+      border-left-color: white; color: white;
+    }
+    nav .nav-section {
+      color: rgba(255,255,255,0.45); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 1px;
+      padding: 14px 20px 4px; font-weight: bold;
+    }
+    /* Contenu principal */
+    main {
+      margin-left: 260px;
+      padding: 40px 50px;
+      max-width: 1000px;
+    }
+    /* Page de titre */
+    .hero {
+      background: var(--bleu); color: white;
+      padding: 48px 50px; margin: -40px -50px 40px;
+    }
+    .hero h1 { font-size: 36px; margin-bottom: 8px; }
+    .hero .subtitle { font-size: 16px; opacity: 0.8; }
+    .hero .meta { font-size: 13px; opacity: 0.6; margin-top: 16px; }
+    /* Sections */
+    h2 {
+      font-size: 24px; color: var(--bleu);
+      border-bottom: 3px solid var(--bleu-clair);
+      padding-bottom: 8px; margin: 40px 0 20px;
+    }
+    h3 { font-size: 18px; color: var(--bleu); margin: 28px 0 12px; }
+    h4 { font-size: 15px; color: var(--gris); margin: 20px 0 8px;
+         text-transform: uppercase; letter-spacing: 0.5px; }
+    p { margin-bottom: 14px; }
+    ul, ol { margin: 12px 0 16px 24px; }
+    li { margin-bottom: 6px; }
+    /* Raccourcis clavier */
+    kbd {
+      background: #f0f0f0; border: 1px solid #ccc;
+      border-radius: 4px; padding: 2px 8px;
+      font-family: monospace; font-size: 13px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+    /* Tableaux */
+    table {
+      width: 100%; border-collapse: collapse;
+      margin: 16px 0 24px; font-size: 14px;
+    }
+    th {
+      background: var(--bleu); color: white;
+      padding: 10px 14px; text-align: left;
+    }
+    td { padding: 9px 14px; border-bottom: 1px solid #e0e0e0; }
+    tr:nth-child(even) td { background: var(--bleu-clair); }
+    /* Notes */
+    .note {
+      background: var(--bleu-clair); border-left: 4px solid var(--bleu);
+      padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0;
+    }
+    .note.warning {
+      background: #fff3cd; border-left-color: var(--orange);
+    }
+    .note.tip {
+      background: #d4edda; border-left-color: var(--vert);
+    }
+    /* Étapes numérotées */
+    .steps { counter-reset: step; list-style: none; margin-left: 0; }
+    .steps li {
+      counter-increment: step;
+      padding: 10px 16px 10px 52px;
+      position: relative; margin-bottom: 10px;
+      background: white; border-radius: 6px;
+      border: 1px solid #e0e0e0;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute; left: 14px; top: 10px;
+      width: 28px; height: 28px; line-height: 28px;
+      background: var(--bleu); color: white;
+      border-radius: 50%; text-align: center;
+      font-weight: bold; font-size: 13px;
+    }
+    /* Badges */
+    .badge {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 12px; font-size: 12px; font-weight: bold;
+    }
+    .badge-nvda { background: #d4edda; color: #155724; }
+    .badge-new  { background: #cce5ff; color: #004085; }
+    /* Code */
+    code {
+      background: #f4f4f4; padding: 2px 6px;
+      border-radius: 3px; font-family: monospace; font-size: 13px;
+    }
+    /* Responsive */
+    @media (max-width: 768px) {
+      nav { display: none; }
+      main { margin-left: 0; padding: 20px; }
+    }
+    /* Accessibilité — focus visible */
+    :focus { outline: 3px solid #ffb900; outline-offset: 2px; }
+    a { color: var(--bleu); }
+    /* Pied de page */
+    footer {
+      margin-top: 60px; padding: 30px 50px;
+      background: var(--bleu); color: rgba(255,255,255,0.7);
+      font-size: 13px; text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation latérale -->
+<nav role="navigation" aria-label="Sommaire du manuel">
+  <div class="nav-title">CommonLedger</div>
+  <div class="nav-version">Version 0.1.0 — Manuel utilisateur</div>
+  <span class="nav-section">Démarrage</span>
+  <a href="#intro">Introduction</a>
+  <a href="#installation">Installation</a>
+  <a href="#premiere-utilisation">Première utilisation</a>
+  <span class="nav-section">Fonctionnalités</span>
+  <a href="#import">1. Import des relevés</a>
+  <a href="#categorisation">2. Catégorisation</a>
+  <a href="#rapport">3. Rapport</a>
+  <a href="#projets">4. Projets analytiques</a>
+  <a href="#parametres">5. Paramètres</a>
+  <span class="nav-section">Référence</span>
+  <a href="#raccourcis">Raccourcis clavier</a>
+  <a href="#accessibilite">Accessibilité NVDA/JAWS</a>
+  <a href="#faq">Questions fréquentes</a>
+  <a href="#credits">Crédits</a>
+</nav>
+
+<!-- Contenu -->
+<main role="main">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>CommonLedger</h1>
+    <div class="subtitle">
+      Manuel d'utilisation — Comptabilité simplifiée pour associations loi 1901
+    </div>
+    <div class="meta">
+      Version 0.1.0 &nbsp;·&nbsp; Développé par BLIND SYSTEMS &nbsp;·&nbsp;
+      &copy; 2026 Amine Khettat
+    </div>
+  </div>
+
+  <!-- Introduction -->
+  <section id="intro">
+    <h2>Introduction</h2>
+    <p>
+      <strong>CommonLedger</strong> est une application de bureau Windows qui automatise
+      la comptabilité annuelle d'une petite association à partir des
+      <strong>relevés bancaires PDF La Banque Postale (CCP)</strong>.
+      Elle génère automatiquement un compte de résultat complet avec graphiques,
+      prêt à présenter en assemblée générale.
+    </p>
+    <div class="note tip">
+      <strong>Accessibilité totale :</strong> CommonLedger a été conçu dès le départ
+      pour être <strong>100% utilisable sans souris</strong>, avec une compatibilité
+      complète NVDA et JAWS via l'API UIA de Windows.
+    </div>
+    <h3>Ce que fait CommonLedger</h3>
+    <ul>
+      <li>Extrait automatiquement toutes les transactions depuis vos relevés PDF</li>
+      <li>Catégorise les dépenses et recettes par règles (cotisations, loyers, etc.)</li>
+      <li>Gère les virements complexes (HelloAsso, éclatement multi-catégories)</li>
+      <li>Génère un rapport Word/PDF professionnel avec graphiques</li>
+      <li>Produit des exports CSV pour audit</li>
+      <li>Permet une comptabilité analytique par projet (concerts, tournées…)</li>
+    </ul>
+    <h3>Ce que CommonLedger ne fait pas</h3>
+    <ul>
+      <li>Il ne remplace pas un expert-comptable pour les grandes associations</li>
+      <li>Il ne gère pas la comptabilité en partie double (plan comptable général)</li>
+      <li>Il ne se connecte pas directement à la banque (import manuel des PDFs)</li>
+    </ul>
+  </section>
+
+  <!-- Installation -->
+  <section id="installation">
+    <h2>Installation</h2>
+    <h3>Prérequis</h3>
+    <ul>
+      <li>Windows 10 ou 11 (64 bits)</li>
+      <li>Python 3.11 ou supérieur — <a href="https://python.org/downloads">python.org/downloads</a></li>
+      <li>Microsoft Word (optionnel, pour la conversion PDF)</li>
+    </ul>
+    <h3>Installation depuis les sources</h3>
+    <ol class="steps">
+      <li>Télécharger le projet depuis
+          <code>https://github.com/aminekhettat/commonledger</code></li>
+      <li>Ouvrir une invite de commande dans le dossier du projet</li>
+      <li>Créer un environnement virtuel : <code>python -m venv venv</code></li>
+      <li>Activer l'environnement : <code>venv\Scripts\activate</code></li>
+      <li>Installer les dépendances : <code>pip install -r requirements.txt</code></li>
+      <li>Copier le fichier de configuration :
+          <code>copy config\association.example.json config\association.json</code></li>
+      <li>Lancer l'application : <code>python main.py</code></li>
+    </ol>
+    <div class="note">
+      <strong>Première utilisation :</strong> À l'ouverture, allez directement dans
+      l'onglet <strong>Paramètres (Alt+5)</strong> pour renseigner les informations
+      de votre association avant tout import.
+    </div>
+  </section>
+
+  <!-- Première utilisation -->
+  <section id="premiere-utilisation">
+    <h2>Première utilisation — Flux de travail recommandé</h2>
+    <ol class="steps">
+      <li><strong>Paramètres (Alt+5)</strong> — Renseigner nom, SIRET, Waldec, IBAN, logo</li>
+      <li><strong>Import (Alt+1)</strong> — Sélectionner le dossier des relevés PDF,
+          saisir le solde au 1er janvier, cliquer sur Importer</li>
+      <li><strong>Catégorisation (Alt+2)</strong> — Vérifier les transactions
+          non reconnues et les catégoriser manuellement</li>
+      <li><strong>Rapport (Alt+3)</strong> — Cliquer sur "Calculer" pour voir le
+          graphique et l'aperçu, puis "Générer le rapport"</li>
+    </ol>
+  </section>
+
+  <!-- Import -->
+  <section id="import">
+    <h2>1. Import des relevés <span class="badge badge-nvda">NVDA ✓</span></h2>
+    <p>
+      L'onglet Import (accessible par <kbd>Alt+1</kbd>) permet d'extraire les
+      transactions depuis les fichiers PDF de relevés La Banque Postale.
+    </p>
+    <h3>Procédure d'import</h3>
+    <ol class="steps">
+      <li>Sélectionner l'<strong>année de l'exercice</strong> avec les flèches ou en tapant
+          directement (ex: 2024)</li>
+      <li>Saisir le <strong>solde bancaire au 1er janvier</strong> de l'exercice
+          (trouvable sur le dernier relevé de décembre de l'année précédente)</li>
+      <li>Indiquer le <strong>dossier contenant les PDFs</strong> : taper le chemin ou
+          utiliser le bouton Parcourir (<kbd>Alt+P</kbd>)</li>
+      <li>Cliquer sur <strong>Importer les relevés</strong> (<kbd>Alt+I</kbd>)</li>
+      <li>Patienter — le journal affiche la progression fichier par fichier</li>
+      <li>À la fin, un résumé indique le nombre de transactions importées et
+          celles à catégoriser manuellement</li>
+    </ol>
+    <h3>Format des PDFs acceptés</h3>
+    <table>
+      <tr><th>Banque</th><th>Format de nom</th><th>Années supportées</th></tr>
+      <tr><td>La Banque Postale (CCP)</td><td><code>releve_6804150W020_2024-01-31.pdf</code></td><td>2013 – 2026</td></tr>
+      <tr><td>La Banque Postale (CCP)</td><td><code>releve_CCP6804150W020_20240131.pdf</code></td><td>2013 – 2022</td></tr>
+    </table>
+    <div class="note warning">
+      <strong>Important :</strong> Placez tous les relevés d'une même année dans
+      un seul dossier. Ne mélangez pas les années. Un dossier par exercice comptable.
+    </div>
+    <h3>Ce qui est extrait automatiquement</h3>
+    <ul>
+      <li>Date, libellé et montant de chaque transaction</li>
+      <li>Soldes de début et fin de période (pour vérification de cohérence)</li>
+      <li>Période couverte par chaque relevé (depuis le texte du PDF, jamais depuis le nom de fichier)</li>
+    </ul>
+    <h3>Catégorisation automatique</h3>
+    <p>
+      Après import, CommonLedger applique automatiquement des règles par mots-clés
+      pour catégoriser la majorité des transactions. En général, 85-95% des
+      transactions sont reconnues automatiquement.
+    </p>
+  </section>
+
+  <!-- Catégorisation -->
+  <section id="categorisation">
+    <h2>2. Catégorisation <span class="badge badge-nvda">NVDA ✓</span></h2>
+    <p>
+      L'onglet Catégorisation (<kbd>Alt+2</kbd>) affiche toutes les transactions
+      dans un tableau. Les transactions non catégorisées ont un fond <strong>jaune</strong>,
+      les catégorisées ont un fond <strong>vert</strong>, les éclatées (splits)
+      ont un fond <strong>bleu clair</strong>.
+    </p>
+    <h3>Navigation dans le tableau</h3>
+    <table>
+      <tr><th>Action</th><th>Clavier</th></tr>
+      <tr><td>Ligne suivante / précédente</td><td><kbd>↓</kbd> / <kbd>↑</kbd></td></tr>
+      <tr><td>Trier par colonne</td><td>Clic ou espace sur l'en-tête</td></tr>
+      <tr><td>Ouvrir la catégorisation</td><td><kbd>Entrée</kbd> ou double-clic</td></tr>
+      <tr><td>Filtrer non catégorisées</td><td><kbd>Alt+A</kbd></td></tr>
+      <tr><td>Catégorisation auto</td><td><kbd>Alt+C</kbd></td></tr>
+      <tr><td>Sauvegarder</td><td><kbd>Alt+S</kbd> ou <kbd>Ctrl+S</kbd></td></tr>
+    </table>
+    <h3>Catégoriser une transaction</h3>
+    <ol class="steps">
+      <li>Naviguer jusqu'à la ligne souhaitée avec les flèches</li>
+      <li>Appuyer sur <kbd>Entrée</kbd> — le dialogue de catégorisation s'ouvre</li>
+      <li>Choisir la <strong>catégorie</strong> dans la liste déroulante</li>
+      <li>Optionnel : choisir un <strong>projet analytique</strong></li>
+      <li>Optionnel : saisir un <strong>mémo</strong> libre</li>
+      <li>Confirmer avec <kbd>Alt+V</kbd> (Valider) ou <kbd>Entrée</kbd></li>
+    </ol>
+    <h3>Éclater une transaction (split)</h3>
+    <p>
+      Utilisez l'éclatement quand un seul virement correspond à plusieurs postes comptables.
+      Exemple typique : un virement HelloAsso contenant à la fois des cotisations et des dons.
+    </p>
+    <ol class="steps">
+      <li>Ouvrir la catégorisation d'une transaction</li>
+      <li>Cliquer sur <strong>"✂ Éclater cette transaction"</strong> (<kbd>Alt+E</kbd>)</li>
+      <li>Pour chaque partie : choisir une catégorie, saisir le montant, optionnellement un projet</li>
+      <li>Vérifier que le "Restant à ventiler" affiche <strong style="color:#27ae60">0,00 €</strong></li>
+      <li>Valider le split</li>
+    </ol>
+    <div class="note">
+      <strong>Astuce NVDA :</strong> Dans le dialogue de split, le label "Restant à ventiler"
+      est mis à jour en temps réel. Utilisez <kbd>F5</kbd> dans NVDA pour forcer la lecture
+      du texte dynamique.
+    </div>
+    <h3>Colonne Projet</h3>
+    <p>
+      La colonne <em>Projet</em> du tableau affiche le projet associé à chaque transaction.
+      Pour affecter un projet, ouvrir la catégorisation et choisir dans la liste
+      "Projet (optionnel)". Voir la section <a href="#projets">Projets analytiques</a>.
+    </p>
+  </section>
+
+  <!-- Rapport -->
+  <section id="rapport">
+    <h2>3. Rapport <span class="badge badge-nvda">NVDA ✓</span></h2>
+    <p>
+      L'onglet Rapport (<kbd>Alt+3</kbd>) permet de visualiser les résultats et
+      d'exporter le rapport dans différents formats.
+    </p>
+    <h3>Interface du panneau Rapport</h3>
+    <p>Le panneau est divisé en deux parties séparées par un séparateur glissant :</p>
+    <ul>
+      <li><strong>Gauche</strong> : sélecteur de graphique + canvas interactif</li>
+      <li><strong>Droite</strong> : aperçu textuel du compte de résultat + options export</li>
+    </ul>
+    <h3>Graphique interactif</h3>
+    <p>Quatre types de graphiques sont disponibles dans la liste déroulante :</p>
+    <table>
+      <tr><th>Type</th><th>Description</th></tr>
+      <tr><td>Camembert — Recettes</td><td>Répartition des recettes par catégorie (donut)</td></tr>
+      <tr><td>Camembert — Dépenses</td><td>Répartition des dépenses par catégorie (donut)</td></tr>
+      <tr><td>Histogramme mensuel</td><td>Recettes vs dépenses mois par mois</td></tr>
+      <tr><td>Courbe de trésorerie</td><td>Évolution du solde bancaire sur la période</td></tr>
+    </table>
+    <h3>Filtres disponibles</h3>
+    <ul>
+      <li><strong>Période</strong> : Annuel (1er janvier → 31 décembre) ou Personnalisé</li>
+      <li><strong>Projet</strong> : Tous les projets ou un projet spécifique</li>
+    </ul>
+    <h3>Générer le rapport</h3>
+    <ol class="steps">
+      <li>Sélectionner la période et le projet souhaités</li>
+      <li>Cliquer sur <strong>"🔄 Calculer"</strong> — l'aperçu et le graphique se mettent à jour</li>
+      <li>Choisir le type de graphique dans la liste déroulante</li>
+      <li>Cliquer sur <strong>"📄 Générer le rapport complet"</strong> (<kbd>Alt+G</kbd>)</li>
+      <li>Choisir l'emplacement de sauvegarde du fichier .docx</li>
+      <li>Patienter — Word puis PDF sont générés automatiquement</li>
+    </ol>
+    <h3>Formats d'export</h3>
+    <table>
+      <tr><th>Format</th><th>Contenu</th><th>Usage</th></tr>
+      <tr><td>Word (.docx)</td><td>Rapport complet avec graphiques et tableaux</td><td>Présentation AG, impression</td></tr>
+      <tr><td>PDF</td><td>Conversion du Word</td><td>Archivage, envoi par email</td></tr>
+      <tr><td>CSV synthèse</td><td>Totaux par catégorie</td><td>Audit, tableur</td></tr>
+      <tr><td>CSV détail</td><td>Toutes les transactions</td><td>Vérification, commissaire aux comptes</td></tr>
+    </table>
+    <h3>Structure du rapport Word généré</h3>
+    <ol>
+      <li>Page de garde (logo, résumé financier)</li>
+      <li>Sommaire automatique</li>
+      <li>Informations de l'association</li>
+      <li>Compte de résultat (recettes et dépenses par catégorie)</li>
+      <li>Visualisation graphique (camemberts + histogramme)</li>
+      <li>Évolution de la trésorerie</li>
+      <li>Détail des opérations par catégorie</li>
+      <li>Comptabilité analytique par projet (si projets définis)</li>
+      <li>Signature du trésorier</li>
+    </ol>
+  </section>
+
+  <!-- Projets -->
+  <section id="projets">
+    <h2>4. Projets analytiques <span class="badge badge-nvda">NVDA ✓</span></h2>
+    <p>
+      L'onglet Projets (<kbd>Alt+4</kbd>) permet de créer des projets pour
+      regrouper les recettes et dépenses d'un événement spécifique :
+      concert, tournée, atelier, forum des associations, etc.
+    </p>
+    <h3>Créer un projet</h3>
+    <ol class="steps">
+      <li>Cliquer sur <strong>"➕ Nouveau projet"</strong> (<kbd>Alt+N</kbd>)</li>
+      <li>Saisir le nom du projet (obligatoire)</li>
+      <li>Optionnel : description, date de début, budget prévisionnel</li>
+      <li>Valider — le projet apparaît dans la liste</li>
+    </ol>
+    <h3>Affecter des transactions à un projet</h3>
+    <p>
+      Dans l'onglet Catégorisation (<kbd>Alt+2</kbd>), ouvrir une transaction,
+      choisir le projet dans la liste "Projet (optionnel)".
+      Pour un split, chaque partie peut avoir son propre projet.
+    </p>
+    <h3>Consulter le bilan d'un projet</h3>
+    <p>
+      Dans l'onglet Rapport (<kbd>Alt+3</kbd>), sélectionner le projet dans
+      le filtre "Projet". Le graphique et l'aperçu textuel ne montreront
+      que les transactions de ce projet.
+      Le rapport généré inclura une section "Comptabilité analytique par projet".
+    </p>
+  </section>
+
+  <!-- Paramètres -->
+  <section id="parametres">
+    <h2>5. Paramètres <span class="badge badge-nvda">NVDA ✓</span></h2>
+    <p>
+      L'onglet Paramètres (<kbd>Alt+5</kbd>) contient deux sous-onglets :
+      <strong>Association</strong> et <strong>Catégories</strong>.
+      Les paramètres sont <strong>mémorisés automatiquement</strong> et chargés à chaque démarrage.
+    </p>
+    <h3>Sous-onglet Association</h3>
+    <table>
+      <tr><th>Champ</th><th>Description</th><th>Obligatoire</th></tr>
+      <tr><td>Nom complet</td><td>Nom officiel de l'association</td><td>Oui</td></tr>
+      <tr><td>Sigle</td><td>Acronyme (ex : ACM)</td><td>Non</td></tr>
+      <tr><td>Adresse / CP / Ville</td><td>Adresse du siège social</td><td>Non</td></tr>
+      <tr><td>Email / Téléphone</td><td>Coordonnées de contact</td><td>Non</td></tr>
+      <tr><td>Site web</td><td>URL du site (ex : www.sabamusic.fr)</td><td>Non</td></tr>
+      <tr><td>SIRET</td><td>Numéro SIRET de l'association</td><td>Recommandé</td></tr>
+      <tr><td>Code APE/NAF</td><td>Code d'activité (ex : 9499Z)</td><td>Non</td></tr>
+      <tr><td>N° Waldec (RNA)</td><td>Numéro RNA préfectoral (ex : W751219591)</td><td>Recommandé</td></tr>
+      <tr><td>IBAN</td><td>IBAN du compte bancaire (pour validation des PDFs)</td><td>Oui</td></tr>
+      <tr><td>BIC</td><td>Code BIC de la banque</td><td>Oui</td></tr>
+      <tr><td>Président(e)</td><td>Nom du ou de la présidente</td><td>Non</td></tr>
+      <tr><td>Trésorier(ère)</td><td>Nom du ou de la trésorière (signataire des rapports)</td><td>Recommandé</td></tr>
+      <tr><td>Logo</td><td>Chemin vers un fichier PNG ou JPG (apparaît dans les rapports)</td><td>Non</td></tr>
+      <tr><td>Couleur principale</td><td>Couleur des titres et en-têtes des rapports</td><td>Non</td></tr>
+    </table>
+    <h3>Sous-onglet Catégories</h3>
+    <p>
+      Vous pouvez ajouter, modifier ou supprimer des catégories de recettes et de dépenses.
+      Les catégories existantes sont pré-configurées pour une association culturelle type.
+    </p>
+    <div class="note warning">
+      <strong>Attention :</strong> Supprimer une catégorie utilisée par des transactions
+      existantes rendra ces transactions "non catégorisées". Préférez renommer plutôt que supprimer.
+    </div>
+  </section>
+
+  <!-- Raccourcis clavier -->
+  <section id="raccourcis">
+    <h2>Raccourcis clavier</h2>
+    <h3>Navigation globale</h3>
+    <table>
+      <tr><th>Raccourci</th><th>Action</th></tr>
+      <tr><td><kbd>Alt+1</kbd></td><td>Aller à l'onglet Import</td></tr>
+      <tr><td><kbd>Alt+2</kbd></td><td>Aller à l'onglet Catégorisation</td></tr>
+      <tr><td><kbd>Alt+3</kbd></td><td>Aller à l'onglet Rapport</td></tr>
+      <tr><td><kbd>Alt+4</kbd></td><td>Aller à l'onglet Projets</td></tr>
+      <tr><td><kbd>Alt+5</kbd></td><td>Aller à l'onglet Paramètres</td></tr>
+      <tr><td><kbd>Ctrl+S</kbd></td><td>Sauvegarder l'exercice en cours</td></tr>
+      <tr><td><kbd>F1</kbd></td><td>Aide — À propos</td></tr>
+      <tr><td><kbd>Alt+F4</kbd></td><td>Quitter l'application</td></tr>
+    </table>
+    <h3>Onglet Import</h3>
+    <table>
+      <tr><th>Raccourci</th><th>Action</th></tr>
+      <tr><td><kbd>Alt+P</kbd></td><td>Parcourir les dossiers</td></tr>
+      <tr><td><kbd>Alt+I</kbd></td><td>Lancer l'import</td></tr>
+      <tr><td><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd></td><td>Naviguer entre les champs</td></tr>
+    </table>
+    <h3>Onglet Catégorisation</h3>
+    <table>
+      <tr><th>Raccourci</th><th>Action</th></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Naviguer dans le tableau</td></tr>
+      <tr><td><kbd>Entrée</kbd></td><td>Ouvrir le dialogue de catégorisation</td></tr>
+      <tr><td><kbd>Alt+C</kbd></td><td>Catégorisation automatique</td></tr>
+      <tr><td><kbd>Alt+A</kbd></td><td>Filtrer non catégorisées</td></tr>
+      <tr><td><kbd>Alt+S</kbd></td><td>Sauvegarder</td></tr>
+    </table>
+    <h3>Dans les dialogues</h3>
+    <table>
+      <tr><th>Raccourci</th><th>Action</th></tr>
+      <tr><td><kbd>Tab</kbd></td><td>Champ suivant</td></tr>
+      <tr><td><kbd>Shift+Tab</kbd></td><td>Champ précédent</td></tr>
+      <tr><td><kbd>Espace</kbd></td><td>Cocher/décocher une case</td></tr>
+      <tr><td><kbd>Entrée</kbd></td><td>Valider (équivaut au bouton OK)</td></tr>
+      <tr><td><kbd>Échap</kbd></td><td>Annuler et fermer</td></tr>
+      <tr><td><kbd>Alt+V</kbd></td><td>Valider</td></tr>
+      <tr><td><kbd>Alt+A</kbd></td><td>Annuler</td></tr>
+    </table>
+  </section>
+
+  <!-- Accessibilité -->
+  <section id="accessibilite">
+    <h2>Accessibilité NVDA et JAWS</h2>
+    <p>
+      CommonLedger a été développé par et pour des personnes déficientes visuelles.
+      Voici les spécificités à connaître pour une utilisation optimale.
+    </p>
+    <h3>Configuration recommandée avec NVDA</h3>
+    <ul>
+      <li>Mode de navigation : désactivé (Ctrl+NVDA+Espace) — l'application utilise le mode Application</li>
+      <li>Verbosité des tableaux : Activer l'annonce des en-têtes (NVDA → Préférences → Mise en forme des documents)</li>
+      <li>Délai de lecture des barres de progression : régler à "parler" dans les paramètres NVDA</li>
+    </ul>
+    <h3>Lecture du tableau de catégorisation</h3>
+    <p>
+      NVDA annonce chaque cellule avec son en-tête de colonne : par exemple
+      <em>"Date, 03/01/2024, Libellé, PRELEVEMENT DE PayPal…, Montant, -16,00 €"</em>.
+      Utilisez <kbd>Ctrl+Alt+Flèches</kbd> pour naviguer cellule par cellule.
+    </p>
+    <h3>Graphiques</h3>
+    <p>
+      Les graphiques matplotlib ne sont pas directement lisibles par les lecteurs d'écran.
+      Un <strong>tableau alternatif textuel</strong> est affiché sous chaque graphique
+      dans les rapports Word/PDF. Dans l'interface, le texte de l'aperçu
+      (panneau droit de l'onglet Rapport) donne les mêmes informations en format texte.
+    </p>
+    <h3>JAWS — différences avec NVDA</h3>
+    <ul>
+      <li>JAWS active automatiquement le "mode formulaire" sur les champs de saisie</li>
+      <li>Pour les tableaux, utiliser <kbd>F8</kbd> dans JAWS pour lister les colonnes</li>
+      <li>Les dialogues modaux sont correctement annoncés par les deux lecteurs</li>
+    </ul>
+    <div class="note tip">
+      <strong>Raccourci utile avec NVDA :</strong> Dans le tableau des transactions,
+      appuyer sur <kbd>NVDA+Ctrl+C</kbd> pour copier le contenu de la cellule active.
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <h2>Questions fréquentes</h2>
+    <h3>Le parseur ne trouve pas mes PDFs, que faire ?</h3>
+    <p>
+      Vérifiez que l'IBAN et le numéro de compte dans les Paramètres correspondent
+      exactement à ceux figurant sur les relevés. CommonLedger vérifie l'appartenance
+      du fichier avant d'extraire les données.
+    </p>
+    <h3>J'ai un écart entre le solde calculé et le solde réel</h3>
+    <p>
+      Cela indique des transactions non catégorisées ou un solde initial incorrect.
+      Vérifiez que toutes les transactions sont catégorisées (onglet Catégorisation,
+      filtre "Non catégorisées") et que le solde au 1er janvier est correct.
+    </p>
+    <h3>Le don de Nawel Kerdali n'apparaît pas dans le rapport 2024</h3>
+    <p>
+      Ce don de 500€ (SELARL du Docteur Nawel Kerdali) a été reçu en
+      <strong>novembre 2023</strong>, pas en 2024. Il apparaîtra dans le rapport 2023.
+    </p>
+    <h3>Comment gérer un virement HelloAsso avec cotisations et dons mélangés ?</h3>
+    <p>
+      Ouvrir la transaction HelloAsso → Entrée → cliquer sur "✂ Éclater cette transaction" →
+      Ajouter autant de lignes que nécessaire (cotisations pour X€, dons pour Y€) →
+      Vérifier que le restant affiche 0,00€ → Valider.
+    </p>
+    <h3>Le rapport PDF ne se génère pas</h3>
+    <p>
+      La conversion PDF nécessite Microsoft Word ou LibreOffice. Vérifiez qu'un
+      de ces logiciels est installé. Le fichier Word (.docx) est toujours généré,
+      indépendamment de la conversion PDF.
+    </p>
+    <h3>Puis-je utiliser CommonLedger avec une autre banque ?</h3>
+    <p>
+      La version actuelle supporte uniquement La Banque Postale (CCP).
+      Le projet est open source — des contributions pour d'autres banques
+      (Crédit Agricole, BNP, Société Générale) sont les bienvenues sur GitHub.
+    </p>
+  </section>
+
+  <!-- Crédits -->
+  <section id="credits">
+    <h2>Crédits et informations légales</h2>
+    <table>
+      <tr><th>Élément</th><th>Information</th></tr>
+      <tr><td>Application</td><td>CommonLedger v0.1.0</td></tr>
+      <tr><td>Développeur</td><td>Amine Khettat</td></tr>
+      <tr><td>Entreprise</td><td>BLIND SYSTEMS SAS</td></tr>
+      <tr><td>Site web</td><td><a href="https://www.blindsystems.org">www.blindsystems.org</a></td></tr>
+      <tr><td>Email</td><td><a href="mailto:contact@blindsystems.org">contact@blindsystems.org</a></td></tr>
+      <tr><td>Code source</td><td><a href="https://github.com/aminekhettat/commonledger">github.com/aminekhettat/commonledger</a></td></tr>
+      <tr><td>Licence</td><td>PolyForm Noncommercial License 1.0 — usage non commercial libre</td></tr>
+      <tr><td>Copyright</td><td>&copy; 2026 Amine Khettat — BLIND SYSTEMS</td></tr>
+      <tr><td>Technologies</td><td>Python 3.11+, PySide6, matplotlib, python-docx, pdfplumber</td></tr>
+    </table>
+    <div class="note">
+      <strong>L'inclusion en action, l'innovation par passion !</strong><br>
+      CommonLedger a été conçu par Amine Khettat, développeur aveugle et fondateur de
+      BLIND SYSTEMS, pour répondre aux besoins réels de l'Association Culture Musique (ACM) —
+      Paris. Ce projet illustre qu'une accessibilité totale et une qualité professionnelle
+      sont pleinement compatibles.
+    </div>
+  </section>
+
+</main>
+
+<footer role="contentinfo">
+  CommonLedger v0.1.0 &nbsp;·&nbsp;
+  Développé par <strong>BLIND SYSTEMS</strong> — Amine Khettat &nbsp;·&nbsp;
+  <a href="https://www.blindsystems.org" style="color:rgba(255,255,255,0.7)">www.blindsystems.org</a>
+  &nbsp;·&nbsp; &copy; 2026
+</footer>
+
+</body>
+</html>

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QAction, QKeySequence, QIcon
 from PySide6.QtCore import Qt, QSize
 
+from .about_dialog import AboutDialog
 from .widgets.import_widget import ImportWidget
 from .widgets.categorize_widget import CategorizeWidget
 from .widgets.report_widget import ReportWidget
@@ -96,7 +97,8 @@ class MainWindow(QMainWindow):
 
         # Création des widgets de chaque onglet
         self._import_widget = ImportWidget(self._config_asso, self._moteur)
-        self._categorize_widget = CategorizeWidget(self._moteur)
+        # Passer l'analytique au widget de catégorisation pour la colonne Projet
+        self._categorize_widget = CategorizeWidget(self._moteur, self._analytique)
         self._report_widget = ReportWidget(self._config_asso, self._moteur, self._analytique)
         self._projet_widget = ProjetWidget(self._analytique)
         self._settings_widget = SettingsWidget(_CONFIG_ASSO, _CONFIG_CAT, self._moteur)
@@ -146,14 +148,26 @@ class MainWindow(QMainWindow):
         # Menu Aide
         menu_aide = barre.addMenu("&Aide")
 
-        action_apropos = QAction("À &propos de CommonLedger", self)
-        action_apropos.setShortcut(QKeySequence("F1"))
-        action_apropos.triggered.connect(self._afficher_apropos)
-        menu_aide.addAction(action_apropos)
+        action_manuel = QAction("📖 &Manuel d'utilisation", self)
+        action_manuel.setShortcut(QKeySequence("F2"))
+        action_manuel.setStatusTip(
+            "Ouvre le manuel d'utilisation dans le navigateur (F2)"
+        )
+        action_manuel.triggered.connect(self._ouvrir_manuel)
+        menu_aide.addAction(action_manuel)
 
-        action_raccourcis = QAction("&Raccourcis clavier", self)
+        action_raccourcis = QAction("⌨ &Raccourcis clavier", self)
+        action_raccourcis.setShortcut(QKeySequence("F3"))
         action_raccourcis.triggered.connect(self._afficher_raccourcis)
         menu_aide.addAction(action_raccourcis)
+
+        menu_aide.addSeparator()
+
+        action_apropos = QAction("ℹ &À propos de CommonLedger…", self)
+        action_apropos.setShortcut(QKeySequence("F1"))
+        action_apropos.setStatusTip("Informations sur l'application et BLIND SYSTEMS")
+        action_apropos.triggered.connect(self._afficher_apropos)
+        menu_aide.addAction(action_apropos)
 
     def _init_raccourcis(self) -> None:
         """Configure les raccourcis clavier globaux Alt+1 à Alt+5."""
@@ -230,18 +244,31 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage("Aucun exercice en cours à sauvegarder.")
 
-    def _afficher_apropos(self) -> None:
-        """Affiche la boîte de dialogue 'À propos'."""
-        QMessageBox.about(
-            self,
-            "À propos de CommonLedger",
-            "CommonLedger — Version 1.0\n\n"
-            "Application de comptabilité simplifiée pour associations loi 1901.\n\n"
-            "Conçue pour être totalement accessible aux personnes non voyantes\n"
-            "(compatible NVDA et JAWS via l'API UIA de Windows).\n\n"
-            "Projet open source — Python / PySide6\n\n"
-            "Raccourcis : F1 = Aide, Ctrl+S = Sauvegarder, Alt+1 à Alt+5 = Onglets",
+    def _ouvrir_manuel(self) -> None:
+        """Ouvre le manuel d'utilisation dans le navigateur par défaut."""
+        import os, webbrowser
+        from pathlib import Path
+        # Chercher le manuel dans le dossier docs/
+        chemins_possibles = [
+            Path("docs/manuel_utilisateur.html"),
+            Path(__file__).parent.parent / "docs" / "manuel_utilisateur.html",
+        ]
+        for chemin in chemins_possibles:
+            if chemin.exists():
+                webbrowser.open(chemin.resolve().as_uri())
+                self.statusBar().showMessage(
+                    "Manuel d'utilisation ouvert dans le navigateur."
+                )
+                return
+        # Fallback : ouvrir sur GitHub
+        webbrowser.open(
+            "https://github.com/aminekhettat/commonledger/blob/main/docs/manuel_utilisateur.html"
         )
+
+    def _afficher_apropos(self) -> None:
+        """Affiche la fenêtre 'À propos' de CommonLedger et BLIND SYSTEMS."""
+        dlg = AboutDialog(self._config_asso, parent=self)
+        dlg.exec()
 
     def _afficher_raccourcis(self) -> None:
         """Affiche la liste des raccourcis clavier."""
