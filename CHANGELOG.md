@@ -1,7 +1,20 @@
 # CHANGELOG
 
 
+## v0.1.5 (2026-06-01)
+
+### Documentation
+
+- Sphinx+autodoc+napoleon setup with pre-push enforcement
+  ([`dc0ed8b`](https://github.com/aminekhettat/commonledger/commit/dc0ed8b4611d1b0f8923e839199bb916765c194d))
+
+
 ## v0.1.4 (2026-06-01)
+
+### Chores
+
+- **release**: V0.1.4 [skip ci]
+  ([`8b34975`](https://github.com/aminekhettat/commonledger/commit/8b34975fa8f5fe35efb4eb1b31fc9c642cf4739a))
 
 ### Documentation
 
