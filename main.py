@@ -86,11 +86,17 @@ def main() -> None:
 
     # Icône de l'application (barre des tâches + Alt+Tab + barre de titre)
     from PySide6.QtGui import QIcon
-    icon_path = Path("config/assets/icon_commonledger.ico")
-    if not icon_path.exists():
-        icon_path = Path("config/assets/icon_commonledger.png")
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
+    # Icône canvas (v2) en priorité, fallback sur v1
+    for icon_name in [
+        "config/assets/icon_commonledger_canvas.ico",
+        "config/assets/icon_commonledger.ico",
+        "config/assets/icon_commonledger_canvas.png",
+        "config/assets/icon_commonledger.png",
+    ]:
+        icon_path = Path(icon_name)
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
+            break
 
     # Lancer la fenêtre principale
     from ui.main_window import MainWindow
