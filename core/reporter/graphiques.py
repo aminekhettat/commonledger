@@ -126,7 +126,7 @@ class GraphiquesMaker:
         # Légende avec montants
         total = sum(montants)
         legend_labels = [
-            f"{l.label} : {l.montant:,.2f} € ({float(l.montant/total*100):.1f}%)"
+            f"{l.label} : {float(l.montant):,.2f} € ({float(l.montant)*100/total:.1f}%)"
             for l in lignes_non_nulles
         ]
         patches = [

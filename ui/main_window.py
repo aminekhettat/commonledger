@@ -1,5 +1,5 @@
 """
-Fenêtre principale de Comptasso.
+Fenêtre principale de CommonLedger.
 
 Architecture :
     La fenêtre principale utilise un QTabWidget pour organiser les
@@ -45,7 +45,7 @@ _DATA_DIR = "data"
 
 class MainWindow(QMainWindow):
     """
-    Fenêtre principale de l'application Comptasso.
+    Fenêtre principale de l'application CommonLedger.
 
     Coordonne les différents widgets et partage l'état global
     (exercice en cours, moteur de catégorisation) entre eux.
@@ -72,9 +72,9 @@ class MainWindow(QMainWindow):
         self._init_raccourcis()
         self._connecter_signaux()
 
-        self.setWindowTitle("Comptasso — Comptabilité simplifiée pour associations")
+        self.setWindowTitle("CommonLedger — Comptabilité simplifiée pour associations")
         self.resize(1100, 750)
-        self.statusBar().showMessage("Bienvenue dans Comptasso. Commencez par importer vos relevés (Alt+1).")
+        self.statusBar().showMessage("Bienvenue dans CommonLedger. Commencez par importer vos relevés (Alt+1).")
 
     def _charger_config_asso(self) -> dict:
         """Charge la configuration de l'association."""
@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
         # Menu Aide
         menu_aide = barre.addMenu("&Aide")
 
-        action_apropos = QAction("À &propos de Comptasso", self)
+        action_apropos = QAction("À &propos de CommonLedger", self)
         action_apropos.setShortcut(QKeySequence("F1"))
         action_apropos.triggered.connect(self._afficher_apropos)
         menu_aide.addAction(action_apropos)
@@ -199,7 +199,7 @@ class MainWindow(QMainWindow):
             f"Exercice {exercice.annee} chargé : {len(exercice.transactions)} transactions."
         )
         self.setWindowTitle(
-            f"Comptasso — {nom} — Exercice {exercice.annee}"
+            f"CommonLedger — {nom} — Exercice {exercice.annee}"
         )
 
     def _on_config_modifiee(self) -> None:
@@ -234,8 +234,8 @@ class MainWindow(QMainWindow):
         """Affiche la boîte de dialogue 'À propos'."""
         QMessageBox.about(
             self,
-            "À propos de Comptasso",
-            "Comptasso — Version 1.0\n\n"
+            "À propos de CommonLedger",
+            "CommonLedger — Version 1.0\n\n"
             "Application de comptabilité simplifiée pour associations loi 1901.\n\n"
             "Conçue pour être totalement accessible aux personnes non voyantes\n"
             "(compatible NVDA et JAWS via l'API UIA de Windows).\n\n"

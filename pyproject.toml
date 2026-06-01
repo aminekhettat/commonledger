@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+# ============================================================
+# Métadonnées du projet
+# ============================================================
+[project]
+name = "commonledger"
+version = "0.1.0"
+description = "Simplified accounting for non-profit associations — open source, accessible NVDA/JAWS"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Amine Khettat", email = "amine.khettat@blindsystems.org" }
+]
+keywords = ["accounting", "nonprofit", "association", "accessibility", "nvda", "pdf", "french"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Office/Business :: Financial :: Accounting",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: Microsoft :: Windows",
+    "Natural Language :: French",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "pdfplumber>=0.10.0",
+    "PyMuPDF>=1.23.0",
+    "pandas>=2.1.0",
+    "openpyxl>=3.1.0",
+    "python-docx>=1.1.0",
+    "matplotlib>=3.8.0",
+    "comtypes>=1.2.0",
+    "PySide6>=6.6.0",
+    "Pillow>=10.0.0",
+    "python-dateutil>=2.8.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/aminekhettat/commonledger"
+Repository = "https://github.com/aminekhettat/commonledger"
+Issues = "https://github.com/aminekhettat/commonledger/issues"
+
+[project.scripts]
+commonledger = "main:main"
+
+# ============================================================
+# bump-my-version — Gestion du versioning sémantique
+# Usage :
+#   bump-my-version bump patch   → 0.1.0 → 0.1.1  (correctif)
+#   bump-my-version bump minor   → 0.1.0 → 0.2.0  (nouvelle fonctionnalité)
+#   bump-my-version bump major   → 0.1.0 → 1.0.0  (rupture de compatibilité)
+# ============================================================
+[tool.bumpversion]
+current_version = "0.1.0"
+commit = true
+tag = true
+tag_name = "v{new_version}"
+commit_message = "chore: bump version {current_version} → {new_version}"
+allow_dirty = false
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "main.py"
+search = 'setApplicationVersion("{current_version}")'
+replace = 'setApplicationVersion("{new_version}")'
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "CommonLedger v{current_version}"
+replace = "CommonLedger v{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "core/__init__.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
+
+# ============================================================
+# Outils de développement
+# ============================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

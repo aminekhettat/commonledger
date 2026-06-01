@@ -1,5 +1,5 @@
 """
-Comptasso — Point d'entrée principal.
+CommonLedger — Point d'entrée principal.
 
 Lance l'application de comptabilité simplifiée pour associations loi 1901.
 
@@ -63,7 +63,7 @@ def main() -> None:
     """Point d'entrée principal de l'application."""
     configurer_logging()
     logger = logging.getLogger("comptasso")
-    logger.info("Démarrage de Comptasso")
+    logger.info("Démarrage de CommonLedger")
 
     creer_structure_repertoires()
 
@@ -72,8 +72,8 @@ def main() -> None:
     from PySide6.QtCore import Qt, QCoreApplication
 
     # Métadonnées de l'application (utilisées par certains lecteurs d'écran)
-    QCoreApplication.setApplicationName("Comptasso")
-    QCoreApplication.setApplicationVersion("1.0")
+    QCoreApplication.setApplicationName("CommonLedger")
+    QCoreApplication.setApplicationVersion("0.1.0")
     QCoreApplication.setOrganizationName("Association Culture Musique")
 
     app = QApplication(sys.argv)
