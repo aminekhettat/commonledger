@@ -1,4 +1,4 @@
-# TrésoLib 📊
+# CommonLedger 📊
 
 > Comptabilité simplifiée pour associations loi 1901 — open source, accessible, gratuit.
 
@@ -12,7 +12,7 @@
 
 ## Présentation
 
-**TrésoLib** est une application de bureau Windows qui automatise la comptabilité annuelle d'une petite association à partir des **relevés bancaires PDF La Banque Postale (CCP)**.
+**CommonLedger** est une application de bureau Windows qui automatise la comptabilité annuelle d'une petite association à partir des **relevés bancaires PDF La Banque Postale (CCP)**.
 
 Elle génère automatiquement un **compte de résultat complet** avec graphiques, prêt à présenter en assemblée générale.
 
@@ -37,7 +37,7 @@ Conçue dès le départ pour être **totalement accessible aux personnes non voy
 - **Compte de résultat** annuel ou intermédiaire (mi-année, avant AG…)
 - **Graphiques** : camembert recettes, camembert dépenses, histogramme mensuel, courbe de trésorerie
 - **Tableaux alternatifs** pour chaque graphique (accessibilité)
-- Export **Word (.docx)** et **PDF** (via Microsoft Word ou LibreOffice)
+- Export **Word (.docx)**, **PDF** (via Microsoft Word ou LibreOffice) et **CSV** (audit, tableur)
 - En-tête personnalisé : logo, couleurs, SIRET, Waldec, site web
 
 ### 📁 Comptabilité analytique
@@ -71,8 +71,8 @@ Conçue dès le départ pour être **totalement accessible aux personnes non voy
 
 ```bash
 # 1. Cloner le dépôt
-git clone https://github.com/aminekhettat/tresolib.git
-cd tresolib
+git clone https://github.com/aminekhettat/commonledger.git
+cd commonledger
 
 # 2. Créer un environnement virtuel
 python -m venv venv
@@ -111,22 +111,24 @@ Au premier lancement, allez dans **Paramètres (Alt+5)** pour renseigner :
 ## Structure du projet
 
 ```
-tresolib/
-├── main.py                    # Point d'entrée
-├── requirements.txt           # Dépendances Python
+commonledger/
+├── main.py                       # Point d'entrée
+├── pyproject.toml                # Métadonnées + config bump-my-version
+├── requirements.txt              # Dépendances Python
 ├── config/
 │   ├── association.example.json  # Template configuration (à copier)
-│   └── categories.json           # Catalogue des catégories comptables
+│   ├── categories.json           # Catalogue des catégories comptables
+│   └── assets/                   # Logo de l'association
 ├── core/
-│   ├── parser/                # Extraction PDF La Banque Postale
-│   ├── categorizer/           # Moteur de catégorisation
-│   ├── accounting/            # Calculs comptables + analytique
-│   └── reporter/              # Génération Word/PDF avec graphiques
+│   ├── parser/                   # Extraction PDF La Banque Postale (2013–2025)
+│   ├── categorizer/              # Moteur de catégorisation + split HelloAsso
+│   ├── accounting/               # Compte de résultat, analytique par projet
+│   └── reporter/                 # Word, PDF, CSV avec graphiques matplotlib
 ├── ui/
-│   ├── main_window.py         # Fenêtre principale PySide6
-│   ├── accessibility.py       # Helpers NVDA/JAWS
-│   └── widgets/               # Import, Catégorisation, Rapport, Projets, Paramètres
-└── data/                      # Données locales (gitignorées)
+│   ├── main_window.py            # Fenêtre principale PySide6
+│   ├── accessibility.py          # Helpers NVDA/JAWS (labels, tab order)
+│   └── widgets/                  # Import, Catégorisation, Rapport, Projets, Paramètres
+└── data/                         # Données locales (gitignorées)
 ```
 
 ---
@@ -178,4 +180,18 @@ Inspiré par les besoins réels de l'[Association Culture Musique](https://www.s
 
 ---
 
-*TrésoLib — Parce que gérer les finances d'une asso ne devrait pas être une épreuve.*
+---
+
+## Versioning
+
+Ce projet utilise [bump-my-version](https://github.com/callowayproject/bump-my-version) et le versionnage sémantique :
+
+```bash
+bump-my-version bump patch   # 0.1.0 → 0.1.1  correctif
+bump-my-version bump minor   # 0.1.0 → 0.2.0  nouvelle fonctionnalité
+bump-my-version bump major   # 0.1.0 → 1.0.0  rupture de compatibilité
+```
+
+---
+
+*CommonLedger — Because managing your association's finances shouldn't be a burden.*
