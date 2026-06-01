@@ -1,0 +1,81 @@
+name: Release — Auto-versioning
+
+on:
+  push:
+    branches: ["main"]
+    # Ne se déclenche PAS sur les commits de release (évite boucle infinie)
+    paths-ignore:
+      - "CHANGELOG.md"
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: "Semantic Release"
+    runs-on: ubuntu-latest
+    # Ne tourne QUE si le CI a réussi
+    needs: []   # Le workflow CI tourne en parallèle — le release est sur main uniquement
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # Historique complet pour semantic-release
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install semantic-release
+        run: pip install python-semantic-release==9.*
+
+      # ── Analyse des commits et détermination de la version ──────────────
+      # Convention :
+      #   fix: → PATCH  (0.1.0 → 0.1.1)
+      #   feat: → MINOR (0.1.0 → 0.2.0)
+      #   feat!: ou BREAKING CHANGE: → MAJOR (uniquement à la demande)
+      #   chore/docs/style/refactor/test → PATCH
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run semantic release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m semantic_release version --no-commit --no-push --no-tag
+          NEW_VERSION=$(python -m semantic_release version --print)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Version calculée : $NEW_VERSION"
+
+      - name: Commit version bump
+        if: steps.release.outputs.new_version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m semantic_release version \
+            --commit \
+            --push \
+            --tag \
+            --changelog \
+            --vcs-release
+
+      - name: Create GitHub Release
+        if: steps.release.outputs.new_version != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.release.outputs.new_version }}"
+          name: "CommonLedger v${{ steps.release.outputs.new_version }}"
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

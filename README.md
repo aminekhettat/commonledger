@@ -2,8 +2,11 @@
 
 > Comptabilité simplifiée pour associations loi 1901 — open source, accessible, gratuit.
 
+[![CI](https://github.com/aminekhettat/commonledger/actions/workflows/ci.yml/badge.svg)](https://github.com/aminekhettat/commonledger/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-68%25-yellowgreen.svg)](htmlcov/index.html)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![PySide6](https://img.shields.io/badge/UI-PySide6-green.svg)](https://doc.qt.io/qtforpython/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Accessibilité](https://img.shields.io/badge/Accessibilité-NVDA%20%2F%20JAWS-orange.svg)](#accessibilité)
 [![Licence](https://img.shields.io/badge/Licence-PolyForm%20NonCommercial-red.svg)](LICENSE)
 [![Windows](https://img.shields.io/badge/Plateforme-Windows-blue.svg)](#installation)

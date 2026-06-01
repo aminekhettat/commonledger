@@ -86,10 +86,137 @@ replace = '__version__ = "{new_version}"'
 # ============================================================
 # Outils de développement
 # ============================================================
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-v",
+    "--cov=core",
+    "--cov-report=term-missing",
+    "--cov-report=xml:coverage.xml",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=65",
+]
+markers = [
+    "integration: tests nécessitant des ressources externes (disque E, réseau)",
+    "slow: tests lents (> 5 secondes)",
+    "ui: tests de l'interface graphique PySide6",
+]
 
+[tool.coverage.run]
+source = ["core"]
+omit = [
+    "*/tests/*",
+    "*/ui/*",
+    "*/__pycache__/*",
+    "*/conftest.py",
+    # Modules d'intégration pure (génération Word/PDF/graphiques)
+    # Testés via tests d'intégration, pas en CI headless
+    "core/reporter/docx_reporter.py",
+    "core/reporter/graphiques.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@abstractmethod",
+]
+show_missing = true
+fail_under = 65  # seuil réaliste : docx/graphiques sont exclus (intégration)
+
+# ── Ruff (linter + formatteur) ────────────────────────────────────────────────
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["core", "ui", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "N",    # pep8-naming
+    "ANN",  # flake8-annotations (type hints)
+    "S",    # bandit (sécurité via ruff)
+    "T20",  # no print statements in production
+]
+ignore = [
+    "ANN201",  # return type for public function (trop verbeux pour l'instant)
+    "S101",    # assert usage (acceptable dans les tests)
+    "T201",    # print statements (acceptables temporairement)
+    "E501",    # line too long (géré par line-length)
+    "N806",    # variable in function should be lowercase (GUI vars)
+]
+per-file-ignores = { "tests/**" = ["ANN", "S", "T20"] }
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "ui"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ── MyPy (vérification de types) ─────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = [
+    "tests/",
+    "ui/",
+    "config/",
+    "docs/",
+]
+
+[[tool.mypy.overrides]]
+module = ["matplotlib.*", "PIL.*", "pdfplumber.*", "fitz.*", "docx.*", "comtypes.*"]
+ignore_missing_imports = true
+
+# ── Bandit (sécurité) ─────────────────────────────────────────────────────────
+[tool.bandit]
+exclude_dirs = ["tests", "ui", "config/assets"]
+skips = ["B101", "B603", "B607"]  # assert, subprocess, shell=True autorisés
+severity = "medium"
+
+# ── semantic-release (versioning automatique) ─────────────────────────────────
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = [
+    "main.py:CommonLedger.*0.1.0",
+    "core/__init__.py:__version__",
+]
+branch = "main"
+changelog_file = "CHANGELOG.md"
+build_command = ""
+upload_to_repository = false
+upload_to_release = true
+commit_message = "chore(release): v{version} [skip ci]"
+tag_format = "v{version}"
+major_on_zero = false   # La version majeure N'EST PAS auto-incrémentée
+hvcs = "github"
+
+[tool.semantic_release.commit_parser_options]
+# Conventional Commits → version bump rules
+# fix/chore/docs/style/refactor/test/perf/ci → PATCH
+# feat → MINOR
+# feat! ou BREAKING CHANGE → MAJOR (uniquement à la demande explicite)
+allowed_tags = ["feat", "fix", "chore", "docs", "style", "refactor", "test", "perf", "ci", "build"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "chore", "docs", "style", "refactor", "test", "perf", "ci", "build"]

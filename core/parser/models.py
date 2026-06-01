@@ -14,6 +14,7 @@ from typing import Optional
 
 class ParseError(Exception):
     """Levée quand un fichier PDF ne peut pas être parsé correctement."""
+
     pass
 
 
@@ -36,6 +37,7 @@ class Transaction:
         details:         Informations complémentaires (ex. nom du prestataire).
         verrouille:      True si la catégorisation a été validée manuellement.
     """
+
     date: date
     libelle: str
     montant: Decimal
@@ -62,7 +64,12 @@ class Transaction:
         """
         if not self.id_unique:
             import hashlib
-            h = hashlib.md5(self.libelle.encode("utf-8", errors="replace")).hexdigest()[:12]
+
+            # MD5 utilisé uniquement pour la déduplication (pas de sécurité) — nosec B324
+            h = hashlib.md5(  # nosec B324
+                self.libelle.encode("utf-8", errors="replace"),
+                usedforsecurity=False,
+            ).hexdigest()[:12]
             self.id_unique = f"{self.date.isoformat()}_{self.montant}_{h}"
 
     @property
@@ -106,6 +113,7 @@ class Transaction:
     def from_dict(cls, d: dict) -> Transaction:
         """Recrée une Transaction depuis un dictionnaire JSON."""
         from datetime import date as date_type
+
         t = cls(
             date=date_type.fromisoformat(d["date"]),
             libelle=d["libelle"],
@@ -140,6 +148,7 @@ class TransactionSplit:
         memo:         Note libre sur cette part.
         details:      Informations complémentaires (ex. nom prestataire).
     """
+
     montant: Decimal
     categorie_id: str
     projet_id: Optional[str] = None
@@ -181,6 +190,7 @@ class ReleveInfo:
         transactions:    Liste des transactions extraites.
         valide:          True si le fichier a passé la vérification d'appartenance.
     """
+
     fichier: str
     periode_debut: Optional[date] = None
     periode_fin: Optional[date] = None
