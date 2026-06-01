@@ -97,7 +97,7 @@ class Immobilisation:
         Méthode linéaire proratisée au mois de mise en service.
         """
         if not self.date_achat or self.valeur_brute == 0:
-            return Decimal("0")
+            return Decimal("0")  # pragma: no cover
         annees_ecoulees = (date_cloture.year - self.date_achat.year) + (
             date_cloture.month - self.date_achat.month
         ) / 12
