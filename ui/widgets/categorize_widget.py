@@ -1,15 +1,9 @@
 """
-Widget de catégorisation manuelle des transactions.
+Widget de catégorisation — responsive.
 
-Ce widget affiche les transactions non catégorisées et permet à
-l'utilisateur de leur assigner une catégorie, de les éclater (split),
-ou de les rattacher à un projet analytique.
-
-Accessibilité NVDA :
-    - Navigation dans le tableau avec les flèches + Tab
-    - Raccourci Entrée pour ouvrir le formulaire de catégorisation
-    - QDialog modal pour chaque transaction (focus automatique)
-    - Annonce du nombre restant à traiter après chaque action
+Le tableau prend tout l'espace vertical disponible grâce à stretch=1.
+La barre d'outils (stats + boutons) est fixe en hauteur.
+Les dialogues s'adaptent à leur contenu.
 """
 
 import logging
@@ -19,10 +13,11 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QPushButton, QGroupBox, QComboBox,
     QLineEdit, QDialog, QFormLayout, QDialogButtonBox,
-    QMessageBox, QDoubleSpinBox, QSpinBox, QTextEdit,
+    QMessageBox, QDoubleSpinBox, QSizePolicy, QSplitter,
+    QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QKeySequence
+from PySide6.QtGui import QColor, QKeySequence, QShortcut
 
 from ...core.accounting import Exercice
 from ...core.categorizer import MoteurCategorisation
@@ -34,112 +29,71 @@ from ..accessibility import (
 
 logger = logging.getLogger(__name__)
 
-# Couleur de fond pour les lignes non catégorisées
 _COULEUR_NON_CAT = QColor("#fff3cd")
-# Couleur de fond pour les lignes catégorisées
-_COULEUR_CAT = QColor("#d4edda")
+_COULEUR_CAT     = QColor("#d4edda")
+_COULEUR_SPLIT   = QColor("#cce5ff")
 
 
 class DialogueCategorisation(QDialog):
-    """
-    Boîte de dialogue pour catégoriser une transaction.
-
-    Permet de :
-    - Choisir une catégorie unique
-    - Définir un projet analytique
-    - Éclater la transaction en plusieurs catégories (split)
-    - Ajouter un mémo libre
-    - Saisir les détails du prestataire si requis
-    """
-
     def __init__(self, transaction: Transaction, moteur: MoteurCategorisation, parent=None):
         super().__init__(parent)
         self._transaction = transaction
         self._moteur = moteur
-        self._splits: list[tuple] = []
-
+        self._splits = []
         self.setWindowTitle(f"Catégoriser : {transaction.libelle[:50]}")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(520)
         self.setModal(True)
-
         self._init_ui()
 
-    def _init_ui(self) -> None:
+    def _init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
-        # Info transaction
-        grp_info = QGroupBox("Transaction")
-        lay_info = QFormLayout(grp_info)
-        lay_info.addRow("Date :", QLabel(self._transaction.date.strftime("%d/%m/%Y")))
-        lay_info.addRow("Libellé :", QLabel(self._transaction.libelle))
-        lay_info.addRow("Montant :", QLabel(f"{self._transaction.montant:,.2f} €"))
-        layout.addWidget(grp_info)
+        # Infos transaction
+        grp = QGroupBox("Transaction")
+        f = QFormLayout(grp)
+        f.addRow("Date :", QLabel(self._transaction.date.strftime("%d/%m/%Y")))
+        f.addRow("Libellé :", QLabel(self._transaction.libelle[:80]))
+        f.addRow("Montant :", QLabel(f"{self._transaction.montant:,.2f} €"))
+        layout.addWidget(grp)
 
-        # HelloAsso → proposition de split
         if self._moteur.est_helloasso(self._transaction):
-            lbl_ha = QLabel(
-                "ℹ Ce virement semble provenir de HelloAsso. "
-                "Vous pouvez l'éclater entre Cotisations et Dons."
-            )
-            lbl_ha.setWordWrap(True)
-            lbl_ha.setStyleSheet("color: #0d6efd; font-style: italic;")
-            layout.addWidget(lbl_ha)
+            lbl = QLabel("ℹ Ce virement semble provenir de HelloAsso. Vous pouvez l'éclater.")
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("color:#0d6efd; font-style:italic; padding:4px;")
+            layout.addWidget(lbl)
 
-        # Catégorie unique
+        # Catégorie
         grp_cat = QGroupBox("Catégorie")
-        lay_cat = QFormLayout(grp_cat)
-
+        f2 = QFormLayout(grp_cat)
         type_tx = "recettes" if self._transaction.est_credit else "depenses"
         self._combo_cat = QComboBox()
+        self._combo_cat.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._combo_cat.addItem("— Choisir une catégorie —", None)
         for cat in self._moteur.categories_par_type(type_tx):
             self._combo_cat.addItem(cat.label, cat.id)
-        configurer_label_champ(
-            QLabel("Catégorie"), self._combo_cat,
-            "Catégorie comptable",
-            "Choisissez la catégorie correspondant à cette transaction.",
-        )
-
-        # Pré-sélectionner si déjà catégorisé
         if self._transaction.categorie_id:
             idx = self._combo_cat.findData(self._transaction.categorie_id)
             if idx >= 0:
                 self._combo_cat.setCurrentIndex(idx)
-
-        lay_cat.addRow("Catégorie :", self._combo_cat)
+        configurer_label_champ(QLabel("Catégorie"), self._combo_cat, "Catégorie comptable")
+        f2.addRow("Catégorie :", self._combo_cat)
 
         self._edit_memo = QLineEdit()
         self._edit_memo.setPlaceholderText("Note libre optionnelle…")
-        configurer_label_champ(
-            QLabel("Mémo"), self._edit_memo,
-            "Mémo",
-            "Note libre associée à cette transaction (optionnel).",
-        )
         if self._transaction.memo:
             self._edit_memo.setText(self._transaction.memo)
-        lay_cat.addRow("Mémo :", self._edit_memo)
-
+        configurer_label_champ(QLabel("Mémo"), self._edit_memo, "Mémo")
+        f2.addRow("Mémo :", self._edit_memo)
         layout.addWidget(grp_cat)
 
-        # Détails prestataire (si requis)
-        cat_id = self._combo_cat.currentData()
-        cat = self._moteur.get_categorie(cat_id) if cat_id else None
-        if cat and cat.details_requis:
-            self._afficher_champs_details(layout, cat)
-
-        self._combo_cat.currentIndexChanged.connect(self._on_cat_changed)
-
-        # Section split
-        self._btn_split = QPushButton("➕ Éclater cette transaction (split)")
-        configurer_bouton(
-            self._btn_split,
-            "Éclater la transaction",
-            "Répartir le montant entre plusieurs catégories.",
-        )
+        # Bouton split
+        self._btn_split = QPushButton("➕ &Éclater cette transaction (split)")
+        configurer_bouton(self._btn_split, "Éclater la transaction",
+                          "Répartir le montant entre plusieurs catégories.")
         self._btn_split.clicked.connect(self._ouvrir_split)
         layout.addWidget(self._btn_split)
 
-        # Boutons OK / Annuler
         boutons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         boutons.button(QDialogButtonBox.Ok).setText("&Valider")
         boutons.button(QDialogButtonBox.Cancel).setText("&Annuler")
@@ -147,99 +101,63 @@ class DialogueCategorisation(QDialog):
         boutons.rejected.connect(self.reject)
         layout.addWidget(boutons)
 
-        self._champs_details_widgets = {}
-
-    def _afficher_champs_details(self, layout, cat) -> None:
-        """Affiche les champs supplémentaires pour les catégories qui le requièrent."""
-        grp = QGroupBox("Informations complémentaires")
-        lay = QFormLayout(grp)
-        self._champs_details_widgets = {}
-        for champ in cat.champs_details:
-            edit = QLineEdit()
-            label_txt = champ.replace("_", " ").capitalize()
-            configurer_label_champ(QLabel(label_txt), edit, label_txt)
-            lay.addRow(f"{label_txt} :", edit)
-            self._champs_details_widgets[champ] = edit
-        layout.addWidget(grp)
-
-    def _on_cat_changed(self, index: int) -> None:
-        """Met à jour les champs de détails si la catégorie change."""
-        # Simplifié : rechargement complet serait trop complexe ici
-        pass
-
-    def _ouvrir_split(self) -> None:
-        """Ouvre le dialogue de split de transaction."""
+    def _ouvrir_split(self):
         dlg = DialogueSplit(self._transaction, self._moteur, self)
         if dlg.exec() == QDialog.Accepted:
             self._splits = dlg.get_splits()
             self._combo_cat.setEnabled(False)
-            nb = len(self._splits)
-            self._btn_split.setText(f"✅ Éclaté en {nb} partie(s)")
+            self._btn_split.setText(f"✅ Éclaté en {len(self._splits)} partie(s)")
 
-    def _valider(self) -> None:
-        """Applique la catégorisation et ferme la dialogue."""
+    def _valider(self):
         if self._splits:
             try:
                 self._moteur.creer_split(self._transaction, self._splits)
             except ValueError as e:
-                QMessageBox.warning(self, "Erreur de split", str(e))
+                QMessageBox.warning(self, "Erreur", str(e))
                 return
         else:
             cat_id = self._combo_cat.currentData()
             if not cat_id:
-                QMessageBox.warning(
-                    self,
-                    "Catégorie manquante",
-                    "Veuillez choisir une catégorie ou éclater la transaction.",
-                )
+                QMessageBox.warning(self, "Catégorie manquante",
+                                    "Choisissez une catégorie ou éclatez la transaction.")
                 return
             self._transaction.categorie_id = cat_id
             self._transaction.verrouille = True
-
         self._transaction.memo = self._edit_memo.text().strip()
-
-        # Collecter les détails
-        if hasattr(self, "_champs_details_widgets"):
-            for champ, edit in self._champs_details_widgets.items():
-                self._transaction.details[champ] = edit.text().strip()
-
         self.accept()
 
 
 class DialogueSplit(QDialog):
-    """Boîte de dialogue pour éclater une transaction en plusieurs catégories."""
-
     def __init__(self, transaction: Transaction, moteur: MoteurCategorisation, parent=None):
         super().__init__(parent)
         self._transaction = transaction
         self._moteur = moteur
-        self._lignes: list[dict] = []
-
+        self._lignes = []
         montant_abs = abs(transaction.montant)
         self.setWindowTitle(f"Éclater {montant_abs:,.2f} € en plusieurs catégories")
         self.setModal(True)
-        self.setMinimumWidth(550)
+        self.setMinimumWidth(560)
+        self._montant_total = montant_abs
+        self._init_ui()
 
-        self._init_ui(montant_abs)
-
-    def _init_ui(self, montant_total: Decimal) -> None:
+    def _init_ui(self):
         layout = QVBoxLayout(self)
-
         lbl = QLabel(
-            f"Répartissez le montant total de {montant_total:,.2f} € "
-            f"entre plusieurs catégories.\nLa somme doit être égale au total."
+            f"Répartissez {self._montant_total:,.2f} € entre plusieurs catégories.\n"
+            f"La somme doit être égale au total."
         )
         lbl.setWordWrap(True)
         layout.addWidget(lbl)
 
-        self._lbl_restant = QLabel(f"Restant à ventiler : {montant_total:,.2f} €")
-        self._lbl_restant.setStyleSheet("font-weight: bold; color: #1a3a5c;")
-        layout.addWidget(self._lbl_restant)
+        # Zone scrollable pour les lignes de split
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        conteneur = QWidget()
+        self._lay_splits = QVBoxLayout(conteneur)
+        self._lay_splits.setSpacing(6)
+        scroll.setWidget(conteneur)
+        layout.addWidget(scroll, stretch=1)
 
-        self._conteneur_splits = QVBoxLayout()
-        layout.addLayout(self._conteneur_splits)
-
-        # Ajouter 2 lignes par défaut
         self._ajouter_ligne()
         self._ajouter_ligne()
 
@@ -254,144 +172,133 @@ class DialogueSplit(QDialog):
         boutons.rejected.connect(self.reject)
         layout.addWidget(boutons)
 
-        self._montant_total = montant_total
-
-    def _ajouter_ligne(self) -> None:
-        """Ajoute une ligne de ventilation."""
+    def _ajouter_ligne(self):
         type_tx = "recettes" if self._transaction.est_credit else "depenses"
-
-        ligne_layout = QHBoxLayout()
+        row = QWidget()
+        row_lay = QHBoxLayout(row)
+        row_lay.setContentsMargins(0, 0, 0, 0)
         combo = QComboBox()
+        combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         combo.addItem("— Catégorie —", None)
         for cat in self._moteur.categories_par_type(type_tx):
             combo.addItem(cat.label, cat.id)
-
         spin = QDoubleSpinBox()
         spin.setRange(0.01, float(abs(self._transaction.montant)))
         spin.setDecimals(2)
         spin.setSuffix(" €")
-        spin.setMinimumWidth(120)
-
-        ligne_layout.addWidget(combo, 3)
-        ligne_layout.addWidget(spin, 1)
-        self._conteneur_splits.addLayout(ligne_layout)
+        spin.setFixedWidth(130)
+        row_lay.addWidget(combo, stretch=3)
+        row_lay.addWidget(spin, stretch=1)
+        self._lay_splits.addWidget(row)
         self._lignes.append({"combo": combo, "spin": spin})
 
-    def get_splits(self) -> list[tuple]:
-        """Retourne la liste des ventilations (cat_id, montant, projet_id)."""
-        result = []
-        for ligne in self._lignes:
-            cat_id = ligne["combo"].currentData()
-            montant = Decimal(str(ligne["spin"].value()))
-            if cat_id and montant > 0:
-                result.append((cat_id, montant, None))
-        return result
+    def get_splits(self):
+        return [
+            (l["combo"].currentData(), Decimal(str(l["spin"].value())), None)
+            for l in self._lignes
+            if l["combo"].currentData() and l["spin"].value() > 0
+        ]
 
 
 class CategorizeWidget(QWidget):
-    """
-    Widget de revue et catégorisation manuelle.
-
-    Signals:
-        message_status (str): Émis pour mettre à jour la barre de statut.
-    """
     message_status = Signal(str)
 
     def __init__(self, moteur: MoteurCategorisation):
         super().__init__()
         self._moteur = moteur
-        self._exercice: Exercice | None = None
+        self._exercice = None
         self._init_ui()
 
-    def _init_ui(self) -> None:
+    def _init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
 
+        # Titre
         titre = QLabel("Catégorisation des transactions")
-        titre.setStyleSheet("font-size: 18px; font-weight: bold; color: #1a3a5c;")
+        titre.setStyleSheet("font-size:18px;font-weight:bold;color:#1a3a5c;")
+        titre.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(titre)
 
-        # Barre d'outils
+        # Barre d'outils — hauteur fixe
         barre = QHBoxLayout()
-        self._lbl_stats = QLabel("Aucun exercice chargé.")
-        self._lbl_stats.setAccessibleName("Statistiques de catégorisation")
-        barre.addWidget(self._lbl_stats)
-        barre.addStretch()
+        barre.setSpacing(8)
 
-        self._btn_cat_auto = QPushButton("⚡ &Catégorisation automatique")
-        configurer_bouton(
-            self._btn_cat_auto,
-            "Lancer la catégorisation automatique",
-            "Applique les règles automatiques à toutes les transactions non catégorisées.",
-        )
+        self._lbl_stats = QLabel("Aucun exercice chargé.")
+        self._lbl_stats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._lbl_stats.setAccessibleName("Statistiques de catégorisation")
+        barre.addWidget(self._lbl_stats, stretch=1)
+
+        self._btn_cat_auto = QPushButton("⚡ &Catégorisation auto")
+        self._btn_cat_auto.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        configurer_bouton(self._btn_cat_auto, "Catégorisation automatique")
         self._btn_cat_auto.clicked.connect(self._categ_auto)
         barre.addWidget(self._btn_cat_auto)
 
-        self._btn_filtrer = QPushButton("🔍 &Afficher les non catégorisées seulement")
+        self._btn_filtrer = QPushButton("🔍 &Non catégorisées seulement")
         self._btn_filtrer.setCheckable(True)
-        configurer_bouton(self._btn_filtrer, "Filtrer les transactions non catégorisées")
+        self._btn_filtrer.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        configurer_bouton(self._btn_filtrer, "Filtrer transactions non catégorisées")
         self._btn_filtrer.toggled.connect(self._actualiser_tableau)
         barre.addWidget(self._btn_filtrer)
 
         layout.addLayout(barre)
 
-        # Tableau des transactions
+        # Tableau — prend TOUT l'espace vertical restant
         self._tableau = QTableWidget(0, 6)
-        self._tableau.setHorizontalHeaderLabels([
-            "Date", "Libellé", "Montant (€)", "Type", "Catégorie", "Mémo"
-        ])
+        self._tableau.setHorizontalHeaderLabels(
+            ["Date", "Libellé", "Montant (€)", "Type", "Catégorie", "Mémo"]
+        )
         self._tableau.horizontalHeader().setStretchLastSection(True)
+        self._tableau.horizontalHeader().setSectionResizeMode(
+            1, self._tableau.horizontalHeader().Stretch
+        )
         self._tableau.setSelectionBehavior(QTableWidget.SelectRows)
         self._tableau.setEditTriggers(QTableWidget.NoEditTriggers)
         self._tableau.setAlternatingRowColors(True)
         self._tableau.verticalHeader().setVisible(False)
         self._tableau.setSortingEnabled(True)
+        self._tableau.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._tableau.itemDoubleClicked.connect(self._ouvrir_categorisation)
-        self._tableau.setAccessibleName("Tableau des transactions")
-        self._tableau.setAccessibleDescription(
-            "Double-cliquez ou appuyez sur Entrée pour catégoriser la transaction sélectionnée."
+        configurer_tableau(
+            self._tableau, "Tableau des transactions",
+            "Double-cliquez ou Entrée pour catégoriser la ligne sélectionnée.",
+            ["Date", "Libellé", "Montant", "Type", "Catégorie", "Mémo"],
         )
 
-        # Raccourci Entrée pour ouvrir la catégorisation
-        from PySide6.QtGui import QShortcut
-        shortcut_entree = QShortcut(QKeySequence(Qt.Key_Return), self._tableau)
-        shortcut_entree.activated.connect(self._ouvrir_categorisation_selectionnee)
+        sc = QShortcut(QKeySequence(Qt.Key_Return), self._tableau)
+        sc.activated.connect(self._ouvrir_categorisation_selectionnee)
 
-        layout.addWidget(self._tableau)
+        # stretch=1 → le tableau s'étire verticalement avec la fenêtre
+        layout.addWidget(self._tableau, stretch=1)
 
-        # Bouton Sauvegarder
+        # Bouton sauvegarde — hauteur fixe en bas
         self._btn_sauv = QPushButton("💾 &Sauvegarder les catégorisations")
+        self._btn_sauv.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         configurer_bouton(self._btn_sauv, "Sauvegarder")
         self._btn_sauv.clicked.connect(self._sauvegarder)
-        layout.addWidget(self._btn_sauv, alignment=Qt.AlignLeft)
+        layout.addWidget(self._btn_sauv)
 
-    def set_exercice(self, exercice: Exercice) -> None:
-        """Charge un exercice et rafraîchit le tableau."""
+    def set_exercice(self, exercice: Exercice):
         self._exercice = exercice
         self._actualiser_tableau()
 
-    def _actualiser_tableau(self) -> None:
-        """Remplit le tableau avec les transactions de l'exercice."""
+    def _actualiser_tableau(self):
         if not self._exercice:
             return
-
         filtrer = self._btn_filtrer.isChecked()
         transactions = (
             self._exercice.transactions_non_categorisees()
-            if filtrer
-            else self._exercice.transactions
+            if filtrer else self._exercice.transactions
         )
-
         self._tableau.setSortingEnabled(False)
         self._tableau.setRowCount(0)
-
         for t in transactions:
             row = self._tableau.rowCount()
             self._tableau.insertRow(row)
-
             items = [
                 QTableWidgetItem(t.date.strftime("%d/%m/%Y")),
-                QTableWidgetItem(t.libelle),
+                QTableWidgetItem(t.libelle[:80]),
                 QTableWidgetItem(f"{t.montant:+,.2f} €"),
                 QTableWidgetItem("Recette" if t.est_credit else "Dépense"),
                 QTableWidgetItem(self._label_categorie(t)),
@@ -401,26 +308,23 @@ class CategorizeWidget(QWidget):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 item.setData(Qt.UserRole, t)
                 self._tableau.setItem(row, col, item)
-
-            # Coloration selon état de catégorisation
-            couleur = _COULEUR_CAT if t.est_categorisee else _COULEUR_NON_CAT
-            for col in range(self._tableau.columnCount()):
+            couleur = (_COULEUR_SPLIT if t.est_splittee else
+                       _COULEUR_CAT   if t.est_categorisee else
+                       _COULEUR_NON_CAT)
+            for col in range(6):
                 self._tableau.item(row, col).setBackground(couleur)
-
         self._tableau.setSortingEnabled(True)
-        self._tableau.resizeColumnsToContents()
+        self._tableau.resizeColumnToContents(0)
+        self._tableau.resizeColumnToContents(2)
+        self._tableau.resizeColumnToContents(3)
 
-        # Mettre à jour le label de stats
         total = len(self._exercice.transactions)
-        non_cat = len(self._exercice.transactions_non_categorisees())
+        nc = len(self._exercice.transactions_non_categorisees())
         self._lbl_stats.setText(
-            f"Transactions : {total} total | "
-            f"{total - non_cat} catégorisées ✅ | "
-            f"{non_cat} à traiter ⚠"
+            f"Total : {total}  |  Catégorisées : {total-nc} ✅  |  À traiter : {nc} ⚠"
         )
 
-    def _label_categorie(self, t: Transaction) -> str:
-        """Retourne le libellé de catégorie d'une transaction."""
+    def _label_categorie(self, t):
         if t.est_splittee:
             parts = []
             for s in t.splits:
@@ -432,41 +336,33 @@ class CategorizeWidget(QWidget):
             return cat.label if cat else t.categorie_id
         return "— Non catégorisée —"
 
-    def _ouvrir_categorisation(self, item=None) -> None:
-        """Ouvre le dialogue de catégorisation pour la ligne double-cliquée."""
+    def _ouvrir_categorisation(self, item=None):
         row = self._tableau.currentRow() if item is None else item.row()
-        item_row = self._tableau.item(row, 0)
-        if not item_row:
+        it = self._tableau.item(row, 0)
+        if not it:
             return
-        transaction: Transaction = item_row.data(Qt.UserRole)
-
-        dlg = DialogueCategorisation(transaction, self._moteur, self)
+        t: Transaction = it.data(Qt.UserRole)
+        dlg = DialogueCategorisation(t, self._moteur, self)
         if dlg.exec() == QDialog.Accepted:
             self._actualiser_tableau()
-            non_cat = len(self._exercice.transactions_non_categorisees())
-            self.message_status.emit(
-                f"Catégorisation enregistrée. {non_cat} transaction(s) restantes."
-            )
+            nc = len(self._exercice.transactions_non_categorisees())
+            self.message_status.emit(f"Catégorisation enregistrée. {nc} restante(s).")
 
-    def _ouvrir_categorisation_selectionnee(self) -> None:
+    def _ouvrir_categorisation_selectionnee(self):
         self._ouvrir_categorisation()
 
-    def _categ_auto(self) -> None:
-        """Lance la catégorisation automatique sur toutes les transactions."""
+    def _categ_auto(self):
         if not self._exercice:
             return
         stats = self._moteur.categoriser_lot(self._exercice.transactions)
         self._actualiser_tableau()
-        QMessageBox.information(
-            self,
-            "Catégorisation automatique",
+        QMessageBox.information(self, "Catégorisation automatique",
             f"Terminé !\n\n"
-            f"  Catégorisées automatiquement : {stats['auto']}\n"
+            f"  Catégorisées auto : {stats['auto']}\n"
             f"  À traiter manuellement : {stats['a_traiter']}\n"
-            f"  Déjà catégorisées : {stats['deja_faites']}",
-        )
+            f"  Déjà catégorisées : {stats['deja_faites']}")
 
-    def _sauvegarder(self) -> None:
+    def _sauvegarder(self):
         if self._exercice:
             self._exercice.sauvegarder()
             self.message_status.emit("Catégorisations sauvegardées.")
