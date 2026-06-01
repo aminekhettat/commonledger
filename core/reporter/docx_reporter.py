@@ -1,16 +1,14 @@
 """
-Générateur de rapports Word (.docx).
+Générateur de rapports Word (.docx) — CommonLedger v1.1
 
-Ce module construit le document Word du rapport comptable :
-- Page de garde avec logo et informations de l'association
-- Compte de résultat avec totaux et pourcentages
-- Graphiques intégrés (camemberts, histogramme, courbe trésorerie)
-- Tableaux alternatifs textuels pour chaque graphique (accessibilité)
-- Détail des transactions par catégorie
-- Section analytique par projet (si applicable)
-- Alertes de cohérence (si des écarts détectés)
-
-Dépendances : python-docx, matplotlib (via graphiques.py)
+Améliorations de mise en page :
+  - Page de garde professionnelle avec bandeau couleur et logo
+  - Sommaire automatique (TOC Word) en page 2
+  - En-tête sur toutes les pages (sauf p.1) : logo + nom asso + numéro de page
+  - Numérotation « Page X sur Y » à partir de la page 2
+  - Sections structurées avec titres hiérarchiques Word (Titre 1 / Titre 2)
+  - Graphiques agrandis avec légendes complètes
+  - Tableaux accessibles sous chaque graphique
 """
 
 from __future__ import annotations
@@ -23,9 +21,9 @@ from pathlib import Path
 from typing import Optional
 
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor, Cm
+from docx.shared import Inches, Pt, RGBColor, Cm, Emu
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
+from docx.enum.section import WD_SECTION
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
@@ -36,47 +34,111 @@ from .graphiques import GraphiquesMaker, MOIS_FR
 logger = logging.getLogger(__name__)
 
 
-def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
-    """Convertit une couleur hexadécimale en tuple RGB."""
-    hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+# ── Helpers couleurs ──────────────────────────────────────────────────────────
+
+def _rgb(hex_color: str) -> RGBColor:
+    h = hex_color.lstrip("#")
+    return RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
-def _couleur_docx(hex_color: str) -> RGBColor:
-    r, g, b = _hex_to_rgb(hex_color)
-    return RGBColor(r, g, b)
+def _hex_fill(hex_color: str) -> str:
+    return hex_color.lstrip("#")
 
+
+# ── Helpers OxmlElement ───────────────────────────────────────────────────────
+
+def _cell_background(cell, hex_color: str) -> None:
+    """Définit la couleur de fond d'une cellule."""
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex_color.lstrip("#"))
+    tcPr.append(shd)
+
+
+def _add_field(run, field_code: str) -> None:
+    """Insère un champ Word (PAGE, NUMPAGES, TOC…) dans un run."""
+    fldChar_begin = OxmlElement("w:fldChar")
+    fldChar_begin.set(qn("w:fldCharType"), "begin")
+    instrText = OxmlElement("w:instrText")
+    instrText.set(qn("xml:space"), "preserve")
+    instrText.text = field_code
+    fldChar_sep = OxmlElement("w:fldChar")
+    fldChar_sep.set(qn("w:fldCharType"), "separate")
+    fldChar_end = OxmlElement("w:fldChar")
+    fldChar_end.set(qn("w:fldCharType"), "end")
+    run._r.extend([fldChar_begin, instrText, fldChar_sep, fldChar_end])
+
+
+def _add_toc_field(doc: Document) -> None:
+    """Insère le champ TOC de Word (se met à jour à l'ouverture du document)."""
+    para = doc.add_paragraph()
+    para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    run = para.add_run()
+    # Champ TOC : génère un sommaire des titres niveaux 1-3 avec hyperliens
+    fldChar_begin = OxmlElement("w:fldChar")
+    fldChar_begin.set(qn("w:fldCharType"), "begin")
+    instrText = OxmlElement("w:instrText")
+    instrText.set(qn("xml:space"), "preserve")
+    instrText.text = r'TOC \o "1-3" \h \z \u'
+    fldChar_end = OxmlElement("w:fldChar")
+    fldChar_end.set(qn("w:fldCharType"), "end")
+    run._r.extend([fldChar_begin, instrText, fldChar_end])
+
+
+def _add_page_number_field(para) -> None:
+    """Ajoute 'Page X sur Y' dans un paragraphe de pied/en-tête."""
+    run_pre = para.add_run("Page ")
+    run_pre.font.size = Pt(9)
+
+    run_page = para.add_run()
+    _add_field(run_page, "PAGE")
+    run_page.font.size = Pt(9)
+
+    run_sep = para.add_run(" sur ")
+    run_sep.font.size = Pt(9)
+
+    run_total = para.add_run()
+    _add_field(run_total, "NUMPAGES")
+    run_total.font.size = Pt(9)
+
+
+# ── Classe principale ─────────────────────────────────────────────────────────
 
 class DocxReporter:
     """
     Génère le rapport comptable au format Word (.docx).
 
-    Le rapport suit une structure standardisée adaptée aux associations
-    loi 1901. Il peut être personnalisé avec le logo et les couleurs
-    de l'association.
+    Structure du document :
+      1. Page de garde  (section sans en-tête)
+      2. Sommaire       (TOC automatique Word)
+      3. Informations de l'association
+      4. Compte de résultat
+      5. Visualisation graphique
+      6. Évolution de la trésorerie
+      7. Détail des opérations
+      [8. Comptabilité analytique par projet]
+      [9. Alertes de cohérence]
+      10. Signature
 
-    Exemple::
-
-        reporter = DocxReporter(config_asso, "config/categories.json")
-        reporter.generer(compte_resultat, "rapport_2024.docx")
+    En-tête (pages 2+) :
+      Logo | Nom association — Rapport AAAA | Page X sur Y
     """
 
     def __init__(self, config_association: dict, moteur_categorisation):
-        """
-        Initialise le générateur de rapports.
-
-        Args:
-            config_association:   Dictionnaire chargé depuis association.json.
-            moteur_categorisation: MoteurCategorisation (pour les libellés).
-        """
         self.config = config_association
         self.moteur = moteur_categorisation
-        self.couleur_principale = config_association.get("couleur_principale", "#1a3a5c")
-        self.couleur_secondaire = config_association.get("couleur_secondaire", "#e8f0f7")
+        self.cp = config_association.get("couleur_principale", "#1a3a5c")
+        self.cs = config_association.get("couleur_secondaire", "#e8f0f7")
         self.graphiques = GraphiquesMaker(
-            couleur_principale=self.couleur_principale,
-            couleur_secondaire=self.couleur_secondaire,
+            couleur_principale=self.cp,
+            couleur_secondaire=self.cs,
+            dpi=150,
         )
+
+    # ── Point d'entrée ────────────────────────────────────────────────────────
 
     def generer(
         self,
@@ -85,62 +147,69 @@ class DocxReporter:
         bilans_projets: Optional[list[BilanProjet]] = None,
         titre_rapport: Optional[str] = None,
     ) -> str:
-        """
-        Génère le rapport Word complet et le sauvegarde.
-
-        Args:
-            compte_resultat: Résultat calculé par CompteResultat.
-            chemin_sortie:   Chemin du fichier .docx à créer.
-            bilans_projets:  Liste des bilans analytiques par projet (optionnel).
-            titre_rapport:   Titre personnalisé du rapport (optionnel).
-
-        Returns:
-            Chemin absolu du fichier généré.
-        """
-        doc = Document()
-        self._configurer_marges(doc)
-
-        # Titre du rapport
+        cr = compte_resultat
         if not titre_rapport:
-            debut = compte_resultat.date_debut
-            fin = compte_resultat.date_fin
-            if debut.month == 1 and fin.month == 12 and debut.year == fin.year:
-                titre_rapport = f"Rapport annuel {debut.year}"
+            d, f = cr.date_debut, cr.date_fin
+            if d.month == 1 and f.month == 12 and d.year == f.year:
+                titre_rapport = f"Rapport annuel {d.year}"
             else:
                 titre_rapport = (
-                    f"Rapport du {debut.strftime('%d/%m/%Y')} "
-                    f"au {fin.strftime('%d/%m/%Y')}"
+                    f"Rapport du {d.strftime('%d/%m/%Y')} "
+                    f"au {f.strftime('%d/%m/%Y')}"
                 )
 
-        # ── Sections du rapport ──────────────────────────────────────────────
-        self._page_de_garde(doc, titre_rapport, compte_resultat)
+        doc = Document()
+        self._definir_styles(doc)
+
+        # ── Section 1 : Page de garde (première page différente) ──────────────
+        section1 = doc.sections[0]
+        section1.different_first_page_header_footer = True
+        section1.top_margin    = Cm(0)
+        section1.bottom_margin = Cm(2)
+        section1.left_margin   = Cm(2.5)
+        section1.right_margin  = Cm(2.5)
+        self._page_de_garde(doc, titre_rapport, cr)
+
+        # ── Section 2 : Corps du document (en-tête actif) ─────────────────────
+        doc.add_section(WD_SECTION.NEW_PAGE)
+        section2 = doc.sections[-1]
+        section2.top_margin    = Cm(3.5)  # Espace pour l'en-tête
+        section2.bottom_margin = Cm(2.5)
+        section2.left_margin   = Cm(2.5)
+        section2.right_margin  = Cm(2.5)
+
+        # Configurer l'en-tête de la section 2
+        self._configurer_entete(section2, titre_rapport)
+
+        # ── Sommaire ──────────────────────────────────────────────────────────
+        self._sommaire(doc)
+
+        # ── Sections de contenu ───────────────────────────────────────────────
+        self._section_infos(doc)
         doc.add_page_break()
 
-        self._section_infos_association(doc)
+        self._section_compte_resultat(doc, cr)
         doc.add_page_break()
 
-        self._section_compte_resultat(doc, compte_resultat)
+        self._section_graphiques(doc, cr)
         doc.add_page_break()
 
-        self._section_graphiques(doc, compte_resultat)
+        self._section_tresorerie(doc, cr)
         doc.add_page_break()
 
-        self._section_tresorerie(doc, compte_resultat)
-        doc.add_page_break()
-
-        self._section_detail_transactions(doc, compte_resultat)
+        self._section_detail(doc, cr)
 
         if bilans_projets:
             doc.add_page_break()
             self._section_analytique(doc, bilans_projets)
 
-        if compte_resultat.alertes_coherence:
+        if cr.alertes_coherence:
             doc.add_page_break()
-            self._section_alertes(doc, compte_resultat)
+            self._section_alertes(doc, cr)
 
-        self._section_signature(doc, compte_resultat)
+        self._section_signature(doc, cr)
 
-        # ── Sauvegarde ──────────────────────────────────────────────────────
+        # ── Sauvegarde ────────────────────────────────────────────────────────
         Path(chemin_sortie).parent.mkdir(parents=True, exist_ok=True)
         doc.save(chemin_sortie)
         self.graphiques.nettoyer()
@@ -148,542 +217,602 @@ class DocxReporter:
         logger.info(f"Rapport généré : {chemin_sortie}")
         return str(Path(chemin_sortie).resolve())
 
-    def _configurer_marges(self, doc: Document) -> None:
-        """Définit les marges du document (2 cm de chaque côté)."""
-        for section in doc.sections:
-            section.top_margin = Cm(2)
-            section.bottom_margin = Cm(2)
-            section.left_margin = Cm(2.5)
-            section.right_margin = Cm(2.5)
+    # ── Styles globaux ────────────────────────────────────────────────────────
 
-    def _page_de_garde(
-        self, doc: Document, titre: str, cr: CompteResultat
-    ) -> None:
-        """Construit la page de garde."""
-        # Logo
+    def _definir_styles(self, doc: Document) -> None:
+        """Configure les styles de titre Word pour le TOC."""
+        from docx.enum.style import WD_STYLE_TYPE
+        styles = doc.styles
+        # Titre 1 — sections principales
+        try:
+            s1 = styles["Heading 1"]
+            s1.font.size = Pt(15)
+            s1.font.bold = True
+            s1.font.color.rgb = _rgb(self.cp)
+            s1.paragraph_format.space_before = Pt(14)
+            s1.paragraph_format.space_after  = Pt(6)
+        except KeyError:
+            pass
+        # Titre 2 — sous-sections
+        try:
+            s2 = styles["Heading 2"]
+            s2.font.size = Pt(12)
+            s2.font.bold = True
+            s2.font.color.rgb = _rgb(self.cp)
+            s2.paragraph_format.space_before = Pt(10)
+            s2.paragraph_format.space_after  = Pt(4)
+        except KeyError:
+            pass
+
+    # ── En-tête ───────────────────────────────────────────────────────────────
+
+    def _configurer_entete(self, section, titre_rapport: str) -> None:
+        """Configure l'en-tête actif : logo | titre | numérotation."""
+        header = section.header
+        header.is_linked_to_previous = False
+
+        # Vider le contenu par défaut
+        for para in header.paragraphs:
+            para.clear()
+
+        # Tableau à 3 colonnes dans l'en-tête
+        table = header.add_table(rows=1, cols=3, width=Cm(16))
+        table.style = "Table Grid"
+        # Supprimer les bordures du tableau d'en-tête
+        for row in table.rows:
+            for cell in row.cells:
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                tcBorders = OxmlElement("w:tcBorders")
+                for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+                    border = OxmlElement(f"w:{side}")
+                    border.set(qn("w:val"), "none")
+                    tcBorders.append(border)
+                tcPr.append(tcBorders)
+
+        col_logo, col_titre, col_page = table.rows[0].cells
+        col_logo.width  = Cm(3)
+        col_titre.width = Cm(10)
+        col_page.width  = Cm(3)
+
+        # Colonne gauche : logo
         logo = self.config.get("logo_chemin", "")
         if logo and Path(logo).exists():
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run()
-            run.add_picture(logo, width=Inches(2))
-            doc.add_paragraph()
+            p_logo = col_logo.paragraphs[0]
+            p_logo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            run_logo = p_logo.add_run()
+            run_logo.add_picture(logo, height=Cm(1.2))
+        else:
+            col_logo.paragraphs[0].add_run(
+                self.config.get("sigle", "")
+            ).font.bold = True
+
+        # Colonne centrale : nom + titre rapport
+        p_titre = col_titre.paragraphs[0]
+        p_titre.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_nom = p_titre.add_run(self.config.get("nom", ""))
+        run_nom.font.bold = True
+        run_nom.font.size = Pt(9)
+        run_nom.font.color.rgb = _rgb(self.cp)
+        p_titre.add_run(f"\n{titre_rapport}").font.size = Pt(8)
+
+        # Colonne droite : numérotation
+        p_page = col_page.paragraphs[0]
+        p_page.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        _add_page_number_field(p_page)
+
+        # Ligne séparatrice sous l'en-tête
+        p_sep = header.add_paragraph()
+        p_sep.paragraph_format.space_before = Pt(3)
+        p_sep.paragraph_format.space_after  = Pt(0)
+        # Bordure inférieure sur le paragraphe séparateur
+        pPr = p_sep._p.get_or_add_pPr()
+        pBdr = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "6")
+        bottom.set(qn("w:space"), "1")
+        bottom.set(qn("w:color"), _hex_fill(self.cp))
+        pBdr.append(bottom)
+        pPr.append(pBdr)
+
+    # ── Page de garde ─────────────────────────────────────────────────────────
+
+    def _page_de_garde(self, doc: Document, titre: str, cr: CompteResultat) -> None:
+        """Page de garde professionnelle avec bandeau couleur."""
+
+        # Bandeau supérieur coloré (simulé par un tableau pleine largeur)
+        table_top = doc.add_table(rows=1, cols=1)
+        table_top.style = "Table Grid"
+        cell_top = table_top.rows[0].cells[0]
+        cell_top.width = Cm(21)
+        _cell_background(cell_top, self.cp)
+
+        # Logo dans le bandeau
+        p_logo = cell_top.paragraphs[0]
+        p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_logo.paragraph_format.space_before = Pt(18)
+        p_logo.paragraph_format.space_after  = Pt(18)
+        logo = self.config.get("logo_chemin", "")
+        if logo and Path(logo).exists():
+            p_logo.add_run().add_picture(logo, height=Cm(3.5))
+        else:
+            run_sigles = p_logo.add_run(self.config.get("sigle", "ACM"))
+            run_sigles.font.size = Pt(36)
+            run_sigles.font.bold = True
+            run_sigles.font.color.rgb = RGBColor(255, 255, 255)
+
+        doc.add_paragraph()  # espace
 
         # Nom de l'association
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(self.config.get("nom", ""))
-        run.font.size = Pt(20)
-        run.font.bold = True
-        run.font.color.rgb = _couleur_docx(self.couleur_principale)
-
-        # Sigle
-        sigle = self.config.get("sigle", "")
-        if sigle:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(f"({sigle})")
-            run.font.size = Pt(14)
-            run.font.color.rgb = _couleur_docx(self.couleur_principale)
-
-        doc.add_paragraph()
+        p_nom = doc.add_paragraph()
+        p_nom.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_nom = p_nom.add_run(self.config.get("nom", ""))
+        run_nom.font.size = Pt(22)
+        run_nom.font.bold = True
+        run_nom.font.color.rgb = _rgb(self.cp)
 
         # Titre du rapport
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(titre)
-        run.font.size = Pt(26)
-        run.font.bold = True
-        run.font.color.rgb = _couleur_docx(self.couleur_principale)
+        doc.add_paragraph()
+        p_titre = doc.add_paragraph()
+        p_titre.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Bandeau titre avec fond secondaire
+        table_titre = doc.add_table(rows=1, cols=1)
+        table_titre.style = "Table Grid"
+        cell_titre = table_titre.rows[0].cells[0]
+        _cell_background(cell_titre, self.cs)
+        p_t = cell_titre.paragraphs[0]
+        p_t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_t.paragraph_format.space_before = Pt(14)
+        p_t.paragraph_format.space_after  = Pt(14)
+        run_t = p_t.add_run(titre)
+        run_t.font.size = Pt(24)
+        run_t.font.bold = True
+        run_t.font.color.rgb = _rgb(self.cp)
 
         doc.add_paragraph()
-        doc.add_paragraph()
 
-        # Récapitulatif
-        self._ligne_info_garde(doc, "Période", (
-            f"{cr.date_debut.strftime('%d %B %Y')} → {cr.date_fin.strftime('%d %B %Y')}"
-        ))
-        self._ligne_info_garde(doc, "Total recettes", f"{cr.total_recettes:,.2f} €")
-        self._ligne_info_garde(doc, "Total dépenses", f"{cr.total_depenses:,.2f} €")
+        # Récapitulatif financier (tableau centré)
+        table_kpi = doc.add_table(rows=3, cols=2)
+        table_kpi.style = "Table Grid"
+        table_kpi.alignment = WD_TABLE_ALIGNMENT.CENTER if hasattr(
+            __import__('docx').enum.table, 'WD_TABLE_ALIGNMENT') else 1
 
-        resultat_txt = f"{cr.resultat_net:,.2f} €"
-        if cr.est_excedentaire:
-            resultat_txt += "  ✓ Excédent"
-        else:
-            resultat_txt += "  ⚠ Déficit"
-        self._ligne_info_garde(doc, "Résultat net", resultat_txt)
+        kpis = [
+            ("Période analysée",
+             f"{cr.date_debut.strftime('%d/%m/%Y')} → {cr.date_fin.strftime('%d/%m/%Y')}"),
+            ("Total recettes", f"{cr.total_recettes:,.2f} €"),
+            ("Total dépenses", f"{cr.total_depenses:,.2f} €"),
+        ]
+        # Supprimer la 3e ligne si on en a que 3 KPIs
+        for i, (label, valeur) in enumerate(kpis):
+            row = table_kpi.rows[i]
+            cell_l = row.cells[0]
+            cell_v = row.cells[1]
+            _cell_background(cell_l, self.cp)
+            run_l = cell_l.paragraphs[0].add_run(label)
+            run_l.font.bold = True
+            run_l.font.color.rgb = RGBColor(255, 255, 255)
+            run_l.font.size = Pt(11)
+            run_v = cell_v.paragraphs[0].add_run(valeur)
+            run_v.font.size = Pt(11)
+            run_v.font.bold = True
+            cell_v.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        # Résultat avec couleur
+        row_res = table_kpi.add_row()
+        _cell_background(row_res.cells[0], self.cp)
+        run_res_l = row_res.cells[0].paragraphs[0].add_run("Résultat net")
+        run_res_l.font.bold = True
+        run_res_l.font.color.rgb = RGBColor(255, 255, 255)
+        run_res_l.font.size = Pt(12)
+
+        signe = "+" if cr.est_excedentaire else ""
+        run_res_v = row_res.cells[1].paragraphs[0].add_run(
+            f"{signe}{cr.resultat_net:,.2f} €  "
+            + ("✓ Excédent" if cr.est_excedentaire else "⚠ Déficit")
+        )
+        run_res_v.font.size = Pt(12)
+        run_res_v.font.bold = True
+        run_res_v.font.color.rgb = (
+            RGBColor(0, 128, 0) if cr.est_excedentaire else RGBColor(180, 0, 0)
+        )
+        row_res.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
         doc.add_paragraph()
 
         # Informations légales
-        for champ, cle in [
-            ("SIRET", "siret"), ("Code APE", "code_ape"), ("N° Waldec", "numero_waldec")
+        p_legal = doc.add_paragraph()
+        p_legal.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        infos_legales = []
+        for label, cle in [
+            ("SIRET", "siret"), ("APE", "code_ape"), ("Waldec", "numero_waldec"),
+            ("Site", "site_web"),
         ]:
-            valeur = self.config.get(cle, "")
-            if valeur:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run(f"{champ} : {valeur}")
-                run.font.size = Pt(9)
-                run.font.color.rgb = RGBColor(100, 100, 100)
+            val = self.config.get(cle, "")
+            if val:
+                infos_legales.append(f"{label} : {val}")
+        run_legal = p_legal.add_run("  |  ".join(infos_legales))
+        run_legal.font.size = Pt(8)
+        run_legal.font.color.rgb = RGBColor(100, 100, 100)
 
-        # Date de génération
+        # Pied de page de garde
         doc.add_paragraph()
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(f"Document généré le {date.today().strftime('%d/%m/%Y')} — Comptasso")
-        run.font.size = Pt(8)
-        run.font.italic = True
-        run.font.color.rgb = RGBColor(150, 150, 150)
+        p_gen = doc.add_paragraph()
+        p_gen.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_gen = p_gen.add_run(
+            f"Document généré le {date.today().strftime('%d/%m/%Y')} par CommonLedger"
+        )
+        run_gen.font.size = Pt(8)
+        run_gen.font.italic = True
+        run_gen.font.color.rgb = RGBColor(150, 150, 150)
 
-    def _ligne_info_garde(self, doc: Document, label: str, valeur: str) -> None:
-        """Ajoute une ligne label : valeur centrée sur la page de garde."""
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_label = p.add_run(f"{label} : ")
-        run_label.font.bold = True
-        run_label.font.size = Pt(12)
-        run_valeur = p.add_run(valeur)
-        run_valeur.font.size = Pt(12)
+    # ── Sommaire ──────────────────────────────────────────────────────────────
 
-    def _titre_section(self, doc: Document, texte: str) -> None:
-        """Ajoute un titre de section stylé."""
-        p = doc.add_paragraph()
-        run = p.add_run(texte)
-        run.font.size = Pt(16)
-        run.font.bold = True
-        run.font.color.rgb = _couleur_docx(self.couleur_principale)
-        # Bordure inférieure simulée par espacement
-        p.space_after = Pt(6)
-        p.space_before = Pt(12)
+    def _sommaire(self, doc: Document) -> None:
+        """Insère le sommaire (TOC Word automatique)."""
+        h = doc.add_heading("Sommaire", level=1)
+        h.style = doc.styles["Heading 1"]
 
-    def _titre_sous_section(self, doc: Document, texte: str) -> None:
-        """Ajoute un sous-titre de section."""
-        p = doc.add_paragraph()
-        run = p.add_run(texte)
-        run.font.size = Pt(13)
-        run.font.bold = True
-        run.font.color.rgb = _couleur_docx(self.couleur_principale)
-        p.space_before = Pt(8)
-        p.space_after = Pt(4)
+        p_note = doc.add_paragraph(
+            "Ce sommaire se génère automatiquement à l'ouverture du document. "
+            "Si les numéros de page n'apparaissent pas, appuyez sur Ctrl+A puis F9 "
+            "pour mettre à jour tous les champs."
+        )
+        p_note.runs[0].font.size = Pt(8)
+        p_note.runs[0].font.italic = True
+        p_note.runs[0].font.color.rgb = RGBColor(130, 130, 130)
 
-    def _section_infos_association(self, doc: Document) -> None:
-        """Ajoute la section informations de l'association."""
-        self._titre_section(doc, "1. Informations de l'association")
+        _add_toc_field(doc)
+        doc.add_page_break()
+
+    # ── Section 1 : Informations ──────────────────────────────────────────────
+
+    def _section_infos(self, doc: Document) -> None:
+        doc.add_heading("1. Informations de l'association", level=1)
 
         champs = [
-            ("Nom", "nom"), ("Sigle", "sigle"), ("Adresse", "adresse"),
-            ("Code postal", "code_postal"), ("Ville", "ville"),
-            ("Email", "email"), ("Téléphone", "telephone"),
-            ("Site web", "site_web"), ("SIRET", "siret"),
-            ("Code APE/NAF", "code_ape"), ("N° Waldec (RNA)", "numero_waldec"),
-            ("IBAN", "iban"), ("BIC", "bic"),
+            ("Nom complet", "nom"), ("Sigle", "sigle"),
+            ("Adresse", "adresse"), ("Code postal", "code_postal"),
+            ("Ville", "ville"), ("Email", "email"),
+            ("Téléphone", "telephone"), ("Site web", "site_web"),
+            ("SIRET", "siret"), ("Code APE/NAF", "code_ape"),
+            ("N° Waldec (RNA)", "numero_waldec"),
+            ("Banque", "banque"), ("IBAN", "iban"), ("BIC", "bic"),
             ("Président(e)", "president"), ("Trésorier(ère)", "tresorier"),
         ]
 
         table = doc.add_table(rows=0, cols=2)
         table.style = "Table Grid"
-
         for label, cle in champs:
             valeur = self.config.get(cle, "")
             if not valeur:
                 continue
             row = table.add_row()
-            cell_label = row.cells[0]
-            cell_valeur = row.cells[1]
+            _cell_background(row.cells[0], self.cs)
+            run_l = row.cells[0].paragraphs[0].add_run(label)
+            run_l.font.bold = True
+            run_l.font.size = Pt(10)
+            run_l.font.color.rgb = _rgb(self.cp)
+            row.cells[1].paragraphs[0].add_run(str(valeur)).font.size = Pt(10)
+            row.cells[0].width = Cm(5)
+            row.cells[1].width = Cm(10)
 
-            run = cell_label.paragraphs[0].add_run(label)
-            run.bold = True
-            run.font.color.rgb = _couleur_docx(self.couleur_principale)
-
-            cell_valeur.paragraphs[0].add_run(str(valeur))
-
-            # Largeurs colonnes
-            cell_label.width = Cm(5)
-            cell_valeur.width = Cm(10)
+    # ── Section 2 : Compte de résultat ───────────────────────────────────────
 
     def _section_compte_resultat(self, doc: Document, cr: CompteResultat) -> None:
-        """Ajoute le tableau du compte de résultat."""
-        self._titre_section(doc, "2. Compte de résultat")
+        doc.add_heading("2. Compte de résultat", level=1)
 
-        periode = (
-            f"Période du {cr.date_debut.strftime('%d/%m/%Y')} "
-            f"au {cr.date_fin.strftime('%d/%m/%Y')}"
+        p_periode = doc.add_paragraph(
+            f"Période : {cr.date_debut.strftime('%d %B %Y')} "
+            f"au {cr.date_fin.strftime('%d %B %Y')}"
         )
-        p = doc.add_paragraph(periode)
-        p.runs[0].font.italic = True
+        p_periode.runs[0].font.italic = True
+        p_periode.runs[0].font.size = Pt(10)
 
-        doc.add_paragraph()
-
-        # ── RECETTES ─────────────────────────────────────────────────────────
-        self._titre_sous_section(doc, "Recettes")
+        # Recettes
+        doc.add_heading("Recettes", level=2)
         self._tableau_postes(doc, cr.lignes_recettes, cr.total_recettes, "recettes")
-
         doc.add_paragraph()
 
-        # ── DÉPENSES ─────────────────────────────────────────────────────────
-        self._titre_sous_section(doc, "Dépenses")
+        # Dépenses
+        doc.add_heading("Dépenses", level=2)
         self._tableau_postes(doc, cr.lignes_depenses, cr.total_depenses, "dépenses")
-
         doc.add_paragraph()
 
-        # ── RÉSULTAT NET ─────────────────────────────────────────────────────
-        table = doc.add_table(rows=1, cols=2)
-        row = table.rows[0]
-        cell_label = row.cells[0]
-        cell_valeur = row.cells[1]
+        # Résultat net
+        table_res = doc.add_table(rows=1, cols=2)
+        table_res.style = "Table Grid"
+        _cell_background(table_res.rows[0].cells[0], self.cp)
+        run_l = table_res.rows[0].cells[0].paragraphs[0].add_run("RÉSULTAT NET DE L'EXERCICE")
+        run_l.font.bold = True
+        run_l.font.size = Pt(13)
+        run_l.font.color.rgb = RGBColor(255, 255, 255)
 
-        run = cell_label.paragraphs[0].add_run("RÉSULTAT NET DE L'EXERCICE")
-        run.bold = True
-        run.font.size = Pt(13)
-        run.font.color.rgb = _couleur_docx(self.couleur_principale)
-
-        signe = "+" if cr.resultat_net >= 0 else ""
-        run_val = cell_valeur.paragraphs[0].add_run(f"{signe}{cr.resultat_net:,.2f} €")
-        run_val.bold = True
-        run_val.font.size = Pt(13)
-        if cr.est_excedentaire:
-            run_val.font.color.rgb = RGBColor(0, 128, 0)
-        else:
-            run_val.font.color.rgb = RGBColor(180, 0, 0)
-
-        cell_valeur.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        signe = "+" if cr.est_excedentaire else ""
+        run_v = table_res.rows[0].cells[1].paragraphs[0].add_run(
+            f"{signe}{cr.resultat_net:,.2f} €"
+        )
+        run_v.font.bold = True
+        run_v.font.size = Pt(13)
+        run_v.font.color.rgb = (
+            RGBColor(0, 128, 0) if cr.est_excedentaire else RGBColor(180, 0, 0)
+        )
+        table_res.rows[0].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
         if cr.transactions_non_categorisees:
-            doc.add_paragraph()
-            p = doc.add_paragraph(
-                f"⚠ {len(cr.transactions_non_categorisees)} transaction(s) non catégorisée(s) "
-                f"ne sont pas incluses dans ce rapport."
+            p_warn = doc.add_paragraph(
+                f"⚠ {len(cr.transactions_non_categorisees)} transaction(s) "
+                f"non catégorisée(s) exclue(s) de ce rapport."
             )
-            p.runs[0].font.color.rgb = RGBColor(180, 100, 0)
-            p.runs[0].font.italic = True
+            p_warn.runs[0].font.color.rgb = RGBColor(180, 100, 0)
+            p_warn.runs[0].font.size = Pt(9)
 
-    def _tableau_postes(
-        self, doc: Document, lignes: list[LigneResultat], total: Decimal, type_txt: str
-    ) -> None:
-        """Génère le tableau d'un type de poste (recettes ou dépenses)."""
+    def _tableau_postes(self, doc, lignes, total, type_txt: str) -> None:
         if not lignes:
-            doc.add_paragraph(f"Aucune {type_txt} enregistrée pour cette période.")
+            doc.add_paragraph(f"Aucune {type_txt} pour cette période.")
             return
 
         table = doc.add_table(rows=1, cols=4)
         table.style = "Table Grid"
 
-        # En-tête
         entetes = ["Catégorie", "Montant (€)", "Part (%)", "Nb. opérations"]
         for i, titre in enumerate(entetes):
             cell = table.rows[0].cells[i]
+            _cell_background(cell, self.cp)
             run = cell.paragraphs[0].add_run(titre)
-            run.bold = True
+            run.font.bold = True
             run.font.color.rgb = RGBColor(255, 255, 255)
-            # Fond coloré pour l'en-tête
-            self._set_cell_background(cell, self.couleur_principale.lstrip("#"))
+            run.font.size = Pt(10)
 
-        # Lignes de données
-        for i, ligne in enumerate(lignes):
+        for idx, ligne in enumerate(lignes):
             row = table.add_row()
-            row.cells[0].paragraphs[0].add_run(ligne.label)
-            row.cells[1].paragraphs[0].add_run(f"{ligne.montant:,.2f} €")
+            if idx % 2 == 0:
+                for cell in row.cells:
+                    _cell_background(cell, self.cs)
+            row.cells[0].paragraphs[0].add_run(ligne.label).font.size = Pt(10)
+            r1 = row.cells[1].paragraphs[0].add_run(f"{float(ligne.montant):,.2f} €")
+            r1.font.size = Pt(10)
             row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            row.cells[2].paragraphs[0].add_run(f"{ligne.pourcentage:.1f} %")
+            r2 = row.cells[2].paragraphs[0].add_run(f"{ligne.pourcentage:.1f} %")
+            r2.font.size = Pt(10)
             row.cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            row.cells[3].paragraphs[0].add_run(str(ligne.nb_transactions))
+            r3 = row.cells[3].paragraphs[0].add_run(str(ligne.nb_transactions))
+            r3.font.size = Pt(10)
             row.cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-            # Alternance de fond
-            if i % 2 == 0:
-                bg = self.couleur_secondaire.lstrip("#")
-                for cell in row.cells:
-                    self._set_cell_background(cell, bg)
-
         # Ligne total
-        row_total = table.add_row()
-        run = row_total.cells[0].paragraphs[0].add_run(f"TOTAL {type_txt.upper()}")
-        run.bold = True
-        run_val = row_total.cells[1].paragraphs[0].add_run(f"{total:,.2f} €")
-        run_val.bold = True
-        row_total.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run_pct = row_total.cells[2].paragraphs[0].add_run("100,0 %")
-        run_pct.bold = True
-        row_total.cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        row_tot = table.add_row()
+        _cell_background(row_tot.cells[0], "#d4e6f1")
+        r_tl = row_tot.cells[0].paragraphs[0].add_run(f"TOTAL {type_txt.upper()}")
+        r_tl.font.bold = True
+        r_tl.font.size = Pt(11)
+        r_tv = row_tot.cells[1].paragraphs[0].add_run(f"{float(total):,.2f} €")
+        r_tv.font.bold = True
+        r_tv.font.size = Pt(11)
+        row_tot.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        row_tot.cells[2].paragraphs[0].add_run("100,0 %").font.bold = True
+        for c in row_tot.cells:
+            _cell_background(c, "#d4e6f1")
 
-        bg_total = "d4e6f1"
-        for cell in row_total.cells:
-            self._set_cell_background(cell, bg_total)
+    # ── Section 3 : Graphiques ────────────────────────────────────────────────
 
     def _section_graphiques(self, doc: Document, cr: CompteResultat) -> None:
-        """Insère les camemberts et leur tableau d'accessibilité."""
-        self._titre_section(doc, "3. Visualisation graphique")
+        doc.add_heading("3. Visualisation graphique", level=1)
 
         # Camembert recettes
         if cr.lignes_recettes:
-            self._titre_sous_section(doc, "Répartition des recettes")
-            chemin_img, tableau_txt = self.graphiques.camembert_recettes(cr.lignes_recettes)
-            if chemin_img:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run()
-                run.add_picture(chemin_img, width=Inches(5.5))
-            if tableau_txt:
-                doc.add_paragraph()
-                p = doc.add_paragraph("Données du graphique (accessibilité) :")
-                p.runs[0].font.italic = True
-                p.runs[0].font.size = Pt(9)
-                p_data = doc.add_paragraph(tableau_txt)
-                p_data.runs[0].font.size = Pt(8)
-                p_data.runs[0].font.name = "Courier New"
-
-        doc.add_paragraph()
+            doc.add_heading("Répartition des recettes", level=2)
+            img, tableau = self.graphiques.camembert_recettes(cr.lignes_recettes)
+            self._inserer_graphique(doc, img, tableau)
 
         # Camembert dépenses
         if cr.lignes_depenses:
-            self._titre_sous_section(doc, "Répartition des dépenses")
-            chemin_img, tableau_txt = self.graphiques.camembert_depenses(cr.lignes_depenses)
-            if chemin_img:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run()
-                run.add_picture(chemin_img, width=Inches(5.5))
-            if tableau_txt:
-                doc.add_paragraph()
-                p = doc.add_paragraph("Données du graphique (accessibilité) :")
-                p.runs[0].font.italic = True
-                p.runs[0].font.size = Pt(9)
-                p_data = doc.add_paragraph(tableau_txt)
-                p_data.runs[0].font.size = Pt(8)
-                p_data.runs[0].font.name = "Courier New"
+            doc.add_heading("Répartition des dépenses", level=2)
+            img, tableau = self.graphiques.camembert_depenses(cr.lignes_depenses)
+            self._inserer_graphique(doc, img, tableau)
 
         # Histogramme mensuel
         evolution = cr.evolution_mensuelle()
         if evolution:
             doc.add_page_break()
-            self._titre_sous_section(doc, "Recettes et dépenses mensuelles")
-            chemin_img, tableau_txt = self.graphiques.histogramme_mensuel(evolution)
-            if chemin_img:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run()
-                run.add_picture(chemin_img, width=Inches(6))
-            if tableau_txt:
-                doc.add_paragraph()
-                p_data = doc.add_paragraph(tableau_txt)
-                p_data.runs[0].font.size = Pt(8)
-                p_data.runs[0].font.name = "Courier New"
+            doc.add_heading("Recettes et dépenses mensuelles", level=2)
+            img, tableau = self.graphiques.histogramme_mensuel(evolution)
+            self._inserer_graphique(doc, img, tableau)
 
-    def _section_tresorerie(self, doc: Document, cr: CompteResultat) -> None:
-        """Insère la courbe de trésorerie."""
-        self._titre_section(doc, "4. Évolution de la trésorerie")
-
-        evolution = cr.evolution_mensuelle()
-        if not evolution:
-            doc.add_paragraph("Aucune donnée de trésorerie disponible.")
-            return
-
-        p = doc.add_paragraph(f"Solde initial : {cr.solde_initial:,.2f} €")
-        p.runs[0].font.italic = True
-
-        chemin_img, tableau_txt = self.graphiques.courbe_tresorerie(evolution, cr.solde_initial)
-        if chemin_img:
+    def _inserer_graphique(self, doc: Document, chemin_img: str, tableau: str) -> None:
+        """Insère une image de graphique et son tableau d'accessibilité."""
+        if chemin_img and Path(chemin_img).exists():
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run()
-            run.add_picture(chemin_img, width=Inches(6))
-        if tableau_txt:
+            p.add_run().add_picture(chemin_img, width=Inches(6.2))
+
+        if tableau:
             doc.add_paragraph()
-            p_data = doc.add_paragraph(tableau_txt)
-            p_data.runs[0].font.size = Pt(8)
+            p_acc = doc.add_paragraph("Données du graphique (accessibilité) :")
+            p_acc.runs[0].font.size = Pt(8)
+            p_acc.runs[0].font.italic = True
+            p_acc.runs[0].font.color.rgb = RGBColor(100, 100, 100)
+            p_data = doc.add_paragraph(tableau)
             p_data.runs[0].font.name = "Courier New"
+            p_data.runs[0].font.size = Pt(8)
 
-        p_final = doc.add_paragraph(f"Solde estimé en fin de période : {cr.solde_final:,.2f} €")
+        doc.add_paragraph()
+
+    # ── Section 4 : Trésorerie ────────────────────────────────────────────────
+
+    def _section_tresorerie(self, doc: Document, cr: CompteResultat) -> None:
+        doc.add_heading("4. Évolution de la trésorerie", level=1)
+
+        p_init = doc.add_paragraph(f"Solde initial : {float(cr.solde_initial):,.2f} €")
+        p_init.runs[0].font.italic = True
+        p_init.runs[0].font.size = Pt(10)
+
+        evolution = cr.evolution_mensuelle()
+        if evolution:
+            img, tableau = self.graphiques.courbe_tresorerie(evolution, cr.solde_initial)
+            self._inserer_graphique(doc, img, tableau)
+
+        p_final = doc.add_paragraph(
+            f"Solde estimé en fin de période : {float(cr.solde_final):,.2f} €"
+        )
         p_final.runs[0].font.bold = True
+        p_final.runs[0].font.size = Pt(11)
 
-    def _section_detail_transactions(self, doc: Document, cr: CompteResultat) -> None:
-        """Ajoute le détail des transactions par catégorie."""
-        self._titre_section(doc, "5. Détail des opérations par catégorie")
+    # ── Section 5 : Détail ────────────────────────────────────────────────────
 
-        toutes_lignes = cr.lignes_recettes + cr.lignes_depenses
+    def _section_detail(self, doc: Document, cr: CompteResultat) -> None:
+        doc.add_heading("5. Détail des opérations par catégorie", level=1)
 
-        for ligne in toutes_lignes:
+        toutes = cr.lignes_recettes + cr.lignes_depenses
+        for ligne in toutes:
             if not ligne.transactions:
                 continue
-
-            self._titre_sous_section(doc, f"{ligne.label} — {ligne.montant:,.2f} €")
-
+            doc.add_heading(
+                f"{ligne.label} — {float(ligne.montant):,.2f} €", level=2
+            )
             table = doc.add_table(rows=1, cols=3)
             table.style = "Table Grid"
-
-            entetes = ["Date", "Libellé", "Montant (€)"]
-            for i, titre in enumerate(entetes):
-                cell = table.rows[0].cells[i]
+            for j, titre in enumerate(["Date", "Libellé", "Montant (€)"]):
+                cell = table.rows[0].cells[j]
+                _cell_background(cell, self.cp)
                 run = cell.paragraphs[0].add_run(titre)
-                run.bold = True
-                self._set_cell_background(cell, self.couleur_principale.lstrip("#"))
+                run.font.bold = True
                 run.font.color.rgb = RGBColor(255, 255, 255)
+                run.font.size = Pt(10)
 
-            for i, t in enumerate(sorted(ligne.transactions, key=lambda x: x.date)):
+            for idx, t in enumerate(sorted(ligne.transactions, key=lambda x: x.date)):
                 row = table.add_row()
-                row.cells[0].paragraphs[0].add_run(t.date.strftime("%d/%m/%Y"))
-                libelle = t.libelle
+                if idx % 2 == 0:
+                    for c in row.cells:
+                        _cell_background(c, self.cs)
+                row.cells[0].paragraphs[0].add_run(
+                    t.date.strftime("%d/%m/%Y")
+                ).font.size = Pt(9)
+                libelle = t.libelle[:80] + ("…" if len(t.libelle) > 80 else "")
                 if t.memo:
                     libelle += f" ({t.memo})"
-                row.cells[1].paragraphs[0].add_run(libelle)
-                row.cells[2].paragraphs[0].add_run(f"{abs(t.montant):,.2f} €")
+                row.cells[1].paragraphs[0].add_run(libelle).font.size = Pt(9)
+                row.cells[2].paragraphs[0].add_run(
+                    f"{abs(float(t.montant)):,.2f} €"
+                ).font.size = Pt(9)
                 row.cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-                if i % 2 == 0:
-                    for cell in row.cells:
-                        self._set_cell_background(cell, self.couleur_secondaire.lstrip("#"))
-
             doc.add_paragraph()
 
-    def _section_analytique(self, doc: Document, bilans: list[BilanProjet]) -> None:
-        """Ajoute la section comptabilité analytique par projet."""
-        self._titre_section(doc, "6. Comptabilité analytique par projet")
+    # ── Section 6 : Analytique ────────────────────────────────────────────────
 
+    def _section_analytique(self, doc: Document, bilans: list) -> None:
+        doc.add_heading("6. Comptabilité analytique par projet", level=1)
         for bilan in bilans:
-            self._titre_sous_section(doc, bilan.projet.nom)
-
+            doc.add_heading(bilan.projet.nom, level=2)
             if bilan.projet.description:
-                doc.add_paragraph(bilan.projet.description).runs[0].font.italic = True
-
-            table = doc.add_table(rows=4, cols=2)
+                p = doc.add_paragraph(bilan.projet.description)
+                p.runs[0].font.italic = True
+            table = doc.add_table(rows=0, cols=2)
             table.style = "Table Grid"
-
-            donnees = [
-                ("Recettes", f"{bilan.recettes:,.2f} €"),
-                ("Dépenses", f"{bilan.depenses:,.2f} €"),
-                ("Résultat", f"{'+' if bilan.resultat >= 0 else ''}{bilan.resultat:,.2f} €"),
-            ]
-            if bilan.taux_realisation_budget is not None:
-                donnees.append(
-                    ("Réalisation budget", f"{bilan.taux_realisation_budget:.1f} %")
-                )
-
-            for i, (label, valeur) in enumerate(donnees):
-                if i < len(table.rows):
-                    row = table.rows[i]
-                else:
-                    row = table.add_row()
-                row.cells[0].paragraphs[0].add_run(label).bold = True
+            for label, valeur in [
+                ("Recettes", f"{float(bilan.recettes):,.2f} €"),
+                ("Dépenses", f"{float(bilan.depenses):,.2f} €"),
+                ("Résultat", f"{'+' if bilan.resultat >= 0 else ''}{float(bilan.resultat):,.2f} €"),
+            ]:
+                row = table.add_row()
+                row.cells[0].paragraphs[0].add_run(label).font.bold = True
                 row.cells[1].paragraphs[0].add_run(valeur)
-
             doc.add_paragraph()
+
+    # ── Section 7 : Alertes ───────────────────────────────────────────────────
 
     def _section_alertes(self, doc: Document, cr: CompteResultat) -> None:
-        """Ajoute les alertes de cohérence des soldes."""
-        self._titre_section(doc, "⚠ Alertes de cohérence")
-
+        doc.add_heading("⚠ Alertes de cohérence des soldes", level=1)
         p = doc.add_paragraph(
-            "Les écarts suivants ont été détectés entre les soldes calculés "
-            "et les soldes indiqués sur les relevés bancaires :"
+            "Écarts détectés entre les soldes calculés et les soldes des relevés :"
         )
         p.runs[0].font.color.rgb = RGBColor(180, 0, 0)
-
         table = doc.add_table(rows=1, cols=4)
         table.style = "Table Grid"
-
-        for titre_col in ["Date relevé", "Solde calculé", "Solde relevé", "Écart"]:
-            cell = table.rows[0].cells[["Date relevé", "Solde calculé", "Solde relevé", "Écart"].index(titre_col)]
-            run = cell.paragraphs[0].add_run(titre_col)
-            run.bold = True
-
+        for j, t in enumerate(["Date relevé", "Solde calculé", "Solde relevé", "Écart"]):
+            run = table.rows[0].cells[j].paragraphs[0].add_run(t)
+            run.font.bold = True
         for alerte in cr.alertes_coherence:
             row = table.add_row()
             row.cells[0].paragraphs[0].add_run(alerte.date_releve.strftime("%d/%m/%Y"))
-            row.cells[1].paragraphs[0].add_run(f"{alerte.solde_calcule:,.2f} €")
-            row.cells[2].paragraphs[0].add_run(f"{alerte.solde_releve:,.2f} €")
-            ecart_txt = f"{alerte.ecart:,.2f} €"
-            run_ecart = row.cells[3].paragraphs[0].add_run(ecart_txt)
-            run_ecart.font.color.rgb = RGBColor(180, 0, 0)
-            run_ecart.bold = True
+            row.cells[1].paragraphs[0].add_run(f"{float(alerte.solde_calcule):,.2f} €")
+            row.cells[2].paragraphs[0].add_run(f"{float(alerte.solde_releve):,.2f} €")
+            run_e = row.cells[3].paragraphs[0].add_run(f"{float(alerte.ecart):,.2f} €")
+            run_e.font.color.rgb = RGBColor(180, 0, 0)
+            run_e.font.bold = True
+
+    # ── Signature ─────────────────────────────────────────────────────────────
 
     def _section_signature(self, doc: Document, cr: CompteResultat) -> None:
-        """Ajoute la section signature du trésorier."""
         doc.add_paragraph()
-        p = doc.add_paragraph(
-            f"Fait à {self.config.get('ville', '…')}, "
-            f"le {date.today().strftime('%d/%m/%Y')}"
+        p_lieu = doc.add_paragraph(
+            f"Fait à {self.config.get('ville', '…')}, le {date.today().strftime('%d/%m/%Y')}"
         )
+        p_lieu.runs[0].font.size = Pt(10)
         doc.add_paragraph()
         doc.add_paragraph()
-
         tresorier = self.config.get("tresorier", "Le(la) Trésorier(ère)")
         p_sig = doc.add_paragraph(f"Signature du trésorier : {tresorier}")
         p_sig.runs[0].font.bold = True
-
         doc.add_paragraph()
-        doc.add_paragraph("_" * 40)
-        doc.add_paragraph(tresorier)
+        doc.add_paragraph("_" * 45)
+        doc.add_paragraph(tresorier).runs[0].font.italic = True
 
-    @staticmethod
-    def _set_cell_background(cell, hex_color: str) -> None:
-        """Définit la couleur de fond d'une cellule de tableau Word."""
-        tc = cell._tc
-        tcPr = tc.get_or_add_tcPr()
-        shd = OxmlElement("w:shd")
-        shd.set(qn("w:val"), "clear")
-        shd.set(qn("w:color"), "auto")
-        shd.set(qn("w:fill"), hex_color)
-        tcPr.append(shd)
+    # ── Conversion PDF ────────────────────────────────────────────────────────
 
     def convertir_en_pdf(self, chemin_docx: str) -> Optional[str]:
-        """
-        Convertit le fichier Word en PDF via LibreOffice (silencieux).
-
-        LibreOffice doit être installé sur le système.
-        Sur Windows, tente également la conversion via comtypes (Word COM).
-
-        Args:
-            chemin_docx: Chemin vers le fichier .docx source.
-
-        Returns:
-            Chemin vers le fichier PDF généré, ou None en cas d'échec.
-        """
+        """Convertit le Word en PDF via Word COM (Windows) ou LibreOffice."""
         chemin_docx = Path(chemin_docx)
         chemin_pdf = chemin_docx.with_suffix(".pdf")
-
-        # Tentative 1 : conversion via Word (Windows COM)
         if sys.platform == "win32":
             try:
-                return self._convertir_via_word_com(chemin_docx, chemin_pdf)
+                return self._convertir_word_com(chemin_docx, chemin_pdf)
             except Exception as e:
-                logger.warning(f"Conversion Word COM échouée : {e}")
-
-        # Tentative 2 : conversion via LibreOffice
+                logger.warning(f"Word COM: {e}")
         try:
-            return self._convertir_via_libreoffice(chemin_docx, chemin_pdf)
+            return self._convertir_libreoffice(chemin_docx, chemin_pdf)
         except Exception as e:
-            logger.error(f"Conversion LibreOffice échouée : {e}")
-            return None
+            logger.error(f"LibreOffice: {e}")
+        return None
 
-    def _convertir_via_word_com(self, chemin_docx: Path, chemin_pdf: Path) -> str:
-        """Conversion Word → PDF via l'API COM de Microsoft Word (Windows uniquement)."""
+    def _convertir_word_com(self, src: Path, dst: Path) -> str:
         import comtypes.client
         word = comtypes.client.CreateObject("Word.Application")
         word.Visible = False
         try:
-            doc = word.Documents.Open(str(chemin_docx.resolve()))
-            doc.SaveAs(str(chemin_pdf.resolve()), FileFormat=17)  # 17 = PDF
+            # Mettre à jour les champs (TOC, numéros de page) avant export
+            doc = word.Documents.Open(str(src.resolve()))
+            doc.Fields.Update()
+            for section in doc.Sections:
+                try:
+                    section.Headers(1).Range.Fields.Update()
+                    section.Footers(1).Range.Fields.Update()
+                except Exception:
+                    pass
+            doc.SaveAs(str(dst.resolve()), FileFormat=17)
             doc.Close()
         finally:
             word.Quit()
-        logger.info(f"PDF généré via Word COM : {chemin_pdf}")
-        return str(chemin_pdf)
+        return str(dst)
 
-    def _convertir_via_libreoffice(self, chemin_docx: Path, chemin_pdf: Path) -> str:
-        """Conversion Word → PDF via LibreOffice en ligne de commande."""
-        commandes = ["libreoffice", "soffice"]
-        for cmd in commandes:
+    def _convertir_libreoffice(self, src: Path, dst: Path) -> str:
+        for cmd in ["libreoffice", "soffice"]:
             try:
                 subprocess.run(
-                    [cmd, "--headless", "--convert-to", "pdf", "--outdir",
-                     str(chemin_docx.parent), str(chemin_docx)],
-                    check=True,
-                    capture_output=True,
-                    timeout=60,
+                    [cmd, "--headless", "--convert-to", "pdf",
+                     "--outdir", str(src.parent), str(src)],
+                    check=True, capture_output=True, timeout=60,
                 )
-                logger.info(f"PDF généré via LibreOffice : {chemin_pdf}")
-                return str(chemin_pdf)
+                return str(dst)
             except (subprocess.CalledProcessError, FileNotFoundError):
                 continue
-        raise RuntimeError("LibreOffice introuvable. Installez LibreOffice pour la conversion PDF.")
+        raise RuntimeError("LibreOffice introuvable.")
+
+
+# Import manquant pour WD_TABLE_ALIGNMENT
+try:
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+except ImportError:
+    pass
