@@ -1,12 +1,25 @@
 # CHANGELOG
 
 
+## v0.1.4 (2026-06-01)
+
+### Documentation
+
+- Add pdoc API documentation generator and GitHub Pages deployment
+  ([`9ca401f`](https://github.com/aminekhettat/commonledger/commit/9ca401f7f0518fd69432b96702446782ae889de8))
+
+
 ## v0.1.3 (2026-06-01)
 
 ### Bug Fixes
 
 - Mypy 0 errors, parser coverage 45%->86%, total 89% (209 tests)
   ([`e1f9826`](https://github.com/aminekhettat/commonledger/commit/e1f98262022f3e23c25f74cea1397898a8275a44))
+
+### Chores
+
+- **release**: V0.1.3 [skip ci]
+  ([`e2c34e3`](https://github.com/aminekhettat/commonledger/commit/e2c34e38d913aafd13ad6fb419b987232b031abd))
 
 
 ## v0.1.2 (2026-06-01)
