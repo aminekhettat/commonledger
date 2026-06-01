@@ -1,8 +1,17 @@
 """
-Widget de génération des rapports — responsive.
+Widget de génération des rapports avec panel graphique interactif.
 
-L'aperçu textuel (QTextEdit) prend tout l'espace vertical disponible.
-Les options et boutons restent fixes en hauteur.
+Disposition (QSplitter horizontal) :
+  ┌─────────────────────────┬─────────────────────────────────────┐
+  │  PANNEAU GAUCHE         │  PANNEAU DROIT                      │
+  │  Contrôles graphique    │  Aperçu textuel du compte de résult.│
+  │  + Canvas matplotlib    │  + Options export + Bouton générer  │
+  └─────────────────────────┴─────────────────────────────────────┘
+
+Le graphique se met à jour en temps réel quand l'utilisateur change :
+  - Le type de graphique (camembert recettes, dépenses, histogramme, courbe)
+  - La période (annuelle ou personnalisée)
+  - Le projet (tous ou un projet spécifique)
 """
 
 import logging
@@ -11,10 +20,17 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("QtAgg")   # Backend Qt — intégration native PySide6
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.patches as mpatches
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QDateEdit, QPushButton, QFileDialog, QProgressBar,
-    QTextEdit, QRadioButton, QCheckBox, QMessageBox, QSizePolicy,
+    QTextEdit, QRadioButton, QCheckBox, QMessageBox,
+    QSizePolicy, QSplitter, QComboBox, QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal, QDate, QThread, QObject
 
@@ -25,6 +41,16 @@ from ...core.reporter import DocxReporter, CsvReporter
 from ..accessibility import configurer_bouton, configurer_label_champ
 
 logger = logging.getLogger(__name__)
+
+MOIS_COURTS = ["", "Jan.", "Fév.", "Mar.", "Avr.", "Mai", "Jun.",
+               "Jul.", "Aoû.", "Sep.", "Oct.", "Nov.", "Déc."]
+
+TYPES_GRAPHIQUE = [
+    ("camembert_recettes",  "Camembert — Recettes"),
+    ("camembert_depenses",  "Camembert — Dépenses"),
+    ("histogramme",         "Histogramme mensuel"),
+    ("courbe_tresorerie",   "Courbe de trésorerie"),
+]
 
 
 class WorkerRapport(QObject):
@@ -62,16 +88,167 @@ class WorkerRapport(QObject):
             self.erreur.emit(str(e))
 
 
+class GraphiqueCanvas(FigureCanvas):
+    """Canvas matplotlib intégré dans Qt — se redimensionne avec le widget."""
+
+    def __init__(self, parent=None):
+        self._fig = Figure(facecolor="white", tight_layout=True)
+        super().__init__(self._fig)
+        self.setParent(parent)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.updateGeometry()
+        self._ax = None
+        self._afficher_vide()
+
+    def _afficher_vide(self):
+        self._fig.clear()
+        ax = self._fig.add_subplot(111)
+        ax.set_axis_off()
+        ax.text(0.5, 0.5, "Cliquez sur\n« Calculer l'aperçu »\npour afficher le graphique",
+                ha="center", va="center", transform=ax.transAxes,
+                fontsize=11, color="#888888",
+                bbox=dict(boxstyle="round,pad=0.5", facecolor="#f8f9fa", alpha=0.8))
+        self.draw()
+
+    def tracer_camembert(self, lignes: list, titre: str, couleur_titre: str = "#1a3a5c"):
+        """Trace un camembert donut avec légende détaillée."""
+        self._fig.clear()
+
+        lignes_nz = [l for l in lignes if l.montant > 0]
+        if not lignes_nz:
+            self._afficher_vide()
+            return
+
+        montants = [float(l.montant) for l in lignes_nz]
+        couleurs  = [l.couleur for l in lignes_nz]
+        total     = sum(montants)
+
+        ax = self._fig.add_subplot(111)
+
+        wedges, _, autotexts = ax.pie(
+            montants, colors=couleurs,
+            autopct=lambda p: f"{p:.1f}%" if p > 4 else "",
+            startangle=90, pctdistance=0.75,
+            wedgeprops={"edgecolor": "white", "linewidth": 2, "antialiased": True},
+        )
+        for at in autotexts:
+            at.set_fontsize(8)
+            at.set_fontweight("bold")
+            at.set_color("white")
+
+        # Cercle central (effet donut)
+        centre = matplotlib.patches.Circle((0, 0), 0.45, color="white")
+        ax.add_patch(centre)
+        ax.text(0, 0.05, f"{total:,.0f} €".replace(",", " "),
+                ha="center", va="center", fontsize=9,
+                fontweight="bold", color=couleur_titre)
+        ax.text(0, -0.15, "TOTAL", ha="center", va="center",
+                fontsize=7, color="#888888")
+
+        ax.set_title(titre, fontsize=11, fontweight="bold",
+                     color=couleur_titre, pad=8)
+
+        # Légende en bas
+        patches = [mpatches.Patch(color=c, label=(
+            f"{l.label[:22]}\n{float(l.montant):,.0f} € ({float(l.montant)/total*100:.1f}%)"
+            .replace(",", " ")
+        )) for c, l in zip(couleurs, lignes_nz)]
+        ax.legend(handles=patches, loc="lower center",
+                  bbox_to_anchor=(0.5, -0.35),
+                  ncol=max(1, len(patches)//3),
+                  fontsize=7.5, frameon=False,
+                  labelspacing=0.4)
+
+        self._fig.tight_layout()
+        self.draw()
+
+    def tracer_histogramme(self, evolution: list, couleur: str = "#1a3a5c",
+                           couleur_fond: str = "#e8f0f7"):
+        """Trace l'histogramme mensuel recettes vs dépenses."""
+        self._fig.clear()
+        if not evolution:
+            self._afficher_vide()
+            return
+
+        ax = self._fig.add_subplot(111)
+        labels  = [MOIS_COURTS[e["mois"]] for e in evolution]
+        rects   = [float(e["recettes"])  for e in evolution]
+        depens  = [float(e["depenses"])  for e in evolution]
+        x = range(len(evolution))
+        w = 0.38
+
+        bars_r = ax.bar([i - w/2 for i in x], rects,  w, label="Recettes",
+                        color="#27AE60", alpha=0.85, zorder=3)
+        bars_d = ax.bar([i + w/2 for i in x], depens, w, label="Dépenses",
+                        color="#E74C3C", alpha=0.85, zorder=3)
+
+        for b in list(bars_r) + list(bars_d):
+            h = b.get_height()
+            if h > 30:
+                ax.text(b.get_x() + b.get_width()/2, h + 5,
+                        f"{h:,.0f}".replace(",", " "),
+                        ha="center", va="bottom", fontsize=6.5)
+
+        ax.set_xticks(list(x))
+        ax.set_xticklabels(labels, fontsize=8)
+        ax.set_title("Recettes et dépenses mensuelles", fontsize=10,
+                     fontweight="bold", color=couleur)
+        ax.legend(fontsize=9, loc="upper right")
+        ax.set_facecolor(couleur_fond)
+        ax.grid(axis="y", alpha=0.4, zorder=0)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        self._fig.tight_layout()
+        self.draw()
+
+    def tracer_courbe(self, evolution: list, solde_initial: Decimal,
+                      couleur: str = "#1a3a5c", couleur_fond: str = "#e8f0f7"):
+        """Trace la courbe d'évolution du solde."""
+        self._fig.clear()
+        if not evolution:
+            self._afficher_vide()
+            return
+
+        ax = self._fig.add_subplot(111)
+        soldes = []
+        s = float(solde_initial)
+        for e in evolution:
+            s += float(e["recettes"]) - float(e["depenses"])
+            soldes.append(s)
+
+        labels = [MOIS_COURTS[e["mois"]] for e in evolution]
+        ax.fill_between(range(len(soldes)), soldes, alpha=0.12, color=couleur)
+        ax.plot(range(len(soldes)), soldes, color=couleur,
+                linewidth=2, marker="o", markersize=5, label="Solde bancaire")
+        ax.axhline(y=0, color="#E74C3C", linestyle="--", alpha=0.5, linewidth=1)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, fontsize=8)
+        ax.set_title("Évolution de la trésorerie", fontsize=10,
+                     fontweight="bold", color=couleur)
+        ax.legend(fontsize=9)
+        ax.set_facecolor(couleur_fond)
+        ax.grid(alpha=0.3)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        self._fig.tight_layout()
+        self.draw()
+
+
 class ReportWidget(QWidget):
+    """Widget rapport avec graphique interactif et aperçu textuel."""
+
     message_status = Signal(str)
 
-    def __init__(self, config_asso, moteur: MoteurCategorisation,
+    def __init__(self, config_asso: dict, moteur: MoteurCategorisation,
                  analytique: ComptaAnalytique):
         super().__init__()
         self._config = config_asso
         self._moteur = moteur
         self._analytique = analytique
         self._exercice = None
+        self._cr_cache = None
         self._init_ui()
 
     def _init_ui(self):
@@ -85,106 +262,163 @@ class ReportWidget(QWidget):
         titre.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(titre)
 
-        # ── Période ────────────────────────────────────────────────────────
-        grp_p = QGroupBox("Période du rapport")
-        grp_p.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        lay_p = QVBoxLayout(grp_p)
+        # ── Barre de contrôles (période + projet) ─────────────────────────
+        grp_ctrl = QGroupBox("Filtres")
+        grp_ctrl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        lay_ctrl = QHBoxLayout(grp_ctrl)
+        lay_ctrl.setSpacing(12)
 
-        self._radio_annuel = QRadioButton("&Rapport annuel complet")
+        self._radio_annuel = QRadioButton("&Annuel")
         self._radio_annuel.setChecked(True)
-        lay_p.addWidget(self._radio_annuel)
+        lay_ctrl.addWidget(self._radio_annuel)
 
-        self._radio_inter = QRadioButton("&Rapport intermédiaire (période personnalisée)")
-        lay_p.addWidget(self._radio_inter)
+        self._radio_inter = QRadioButton("&Personnalisé")
+        lay_ctrl.addWidget(self._radio_inter)
 
-        grp_dates = QGroupBox("Dates de la période")
-        grp_dates.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        lay_d = QHBoxLayout(grp_dates)
         lbl_d = QLabel("Du :")
         self._date_debut = QDateEdit()
         self._date_debut.setDisplayFormat("dd/MM/yyyy")
         self._date_debut.setCalendarPopup(True)
         self._date_debut.setDate(QDate(date.today().year, 1, 1))
-        configurer_label_champ(lbl_d, self._date_debut, "Date de début")
-        lay_d.addWidget(lbl_d)
-        lay_d.addWidget(self._date_debut)
+        self._date_debut.setEnabled(False)
+        lay_ctrl.addWidget(lbl_d)
+        lay_ctrl.addWidget(self._date_debut)
+
         lbl_f = QLabel("Au :")
         self._date_fin = QDateEdit()
         self._date_fin.setDisplayFormat("dd/MM/yyyy")
         self._date_fin.setCalendarPopup(True)
-        self._date_fin.setDate(QDate(date.today().year, 6, 30))
-        configurer_label_champ(lbl_f, self._date_fin, "Date de fin")
-        lay_d.addWidget(lbl_f)
-        lay_d.addWidget(self._date_fin)
-        lay_d.addStretch()
-        grp_dates.setEnabled(False)
-        self._radio_inter.toggled.connect(grp_dates.setEnabled)
-        lay_p.addWidget(grp_dates)
-        layout.addWidget(grp_p)
+        self._date_fin.setDate(QDate(date.today().year, 12, 31))
+        self._date_fin.setEnabled(False)
+        lay_ctrl.addWidget(lbl_f)
+        lay_ctrl.addWidget(self._date_fin)
 
-        # ── Aperçu — prend tout l'espace vertical restant ──────────────────
-        grp_apercu = QGroupBox("Aperçu du résultat")
-        grp_apercu.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        lay_apercu = QVBoxLayout(grp_apercu)
+        self._radio_inter.toggled.connect(self._date_debut.setEnabled)
+        self._radio_inter.toggled.connect(self._date_fin.setEnabled)
 
-        btn_bar = QHBoxLayout()
-        self._btn_apercu = QPushButton("🔄 &Calculer l'aperçu")
-        self._btn_apercu.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        configurer_bouton(self._btn_apercu, "Calculer l'aperçu")
-        self._btn_apercu.clicked.connect(self._calculer_apercu)
-        btn_bar.addWidget(self._btn_apercu)
-        btn_bar.addStretch()
-        lay_apercu.addLayout(btn_bar)
+        lay_ctrl.addSpacing(20)
+
+        lbl_proj = QLabel("Projet :")
+        self._combo_projet = QComboBox()
+        self._combo_projet.setMinimumWidth(150)
+        self._combo_projet.addItem("Tous les projets", None)
+        for projet in self._analytique.projets_actifs():
+            self._combo_projet.addItem(projet.nom, projet.id)
+        lay_ctrl.addWidget(lbl_proj)
+        lay_ctrl.addWidget(self._combo_projet)
+
+        self._btn_calculer = QPushButton("🔄 &Calculer")
+        self._btn_calculer.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        configurer_bouton(self._btn_calculer, "Calculer l'aperçu et le graphique")
+        self._btn_calculer.clicked.connect(self._calculer)
+        lay_ctrl.addWidget(self._btn_calculer)
+        lay_ctrl.addStretch()
+        layout.addWidget(grp_ctrl)
+
+        # ── Splitter principal : gauche (graphique) | droite (texte+export) ─
+        self._splitter = QSplitter(Qt.Horizontal)
+        self._splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # ── Panneau gauche : sélecteur graphique + canvas ──────────────────
+        panneau_gauche = QWidget()
+        lay_g = QVBoxLayout(panneau_gauche)
+        lay_g.setContentsMargins(0, 0, 6, 0)
+        lay_g.setSpacing(6)
+
+        # Sélecteur type de graphique
+        lbl_type = QLabel("Type de graphique :")
+        lbl_type.setStyleSheet("font-weight:bold; color:#1a3a5c;")
+        lay_g.addWidget(lbl_type)
+
+        self._combo_type_graph = QComboBox()
+        self._combo_type_graph.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        for key, label in TYPES_GRAPHIQUE:
+            self._combo_type_graph.addItem(label, key)
+        self._combo_type_graph.currentIndexChanged.connect(self._mettre_a_jour_graphique)
+        lay_g.addWidget(self._combo_type_graph)
+
+        # Canvas matplotlib — occupe tout l'espace restant
+        self._canvas = GraphiqueCanvas(panneau_gauche)
+        self._canvas.setAccessibleName("Graphique du compte de résultat")
+        self._canvas.setAccessibleDescription(
+            "Graphique matplotlib interactif. Sélectionnez le type avec le combo ci-dessus."
+        )
+        lay_g.addWidget(self._canvas, stretch=1)
+
+        self._splitter.addWidget(panneau_gauche)
+
+        # ── Panneau droit : aperçu + options + bouton ─────────────────────
+        panneau_droit = QWidget()
+        lay_d = QVBoxLayout(panneau_droit)
+        lay_d.setContentsMargins(6, 0, 0, 0)
+        lay_d.setSpacing(8)
+
+        lbl_apercu = QLabel("Aperçu du compte de résultat :")
+        lbl_apercu.setStyleSheet("font-weight:bold; color:#1a3a5c;")
+        lay_d.addWidget(lbl_apercu)
 
         self._lbl_apercu = QTextEdit()
         self._lbl_apercu.setReadOnly(True)
         self._lbl_apercu.setFontFamily("Courier New")
+        self._lbl_apercu.setFontPointSize(9)
         self._lbl_apercu.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._lbl_apercu.setAccessibleName("Aperçu du compte de résultat")
-        lay_apercu.addWidget(self._lbl_apercu, stretch=1)
+        self._lbl_apercu.setAccessibleName("Aperçu textuel du compte de résultat")
+        lay_d.addWidget(self._lbl_apercu, stretch=1)
 
-        layout.addWidget(grp_apercu, stretch=1)
-
-        # ── Options export ─────────────────────────────────────────────────
-        grp_opt = QGroupBox("Options d'export")
+        # Options export
+        grp_opt = QGroupBox("Export")
         grp_opt.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         lay_opt = QVBoxLayout(grp_opt)
         self._chk_pdf = QCheckBox("&Convertir automatiquement en PDF")
         self._chk_pdf.setChecked(True)
         lay_opt.addWidget(self._chk_pdf)
-        layout.addWidget(grp_opt)
+        lay_d.addWidget(grp_opt)
 
-        # ── Bouton + progression ───────────────────────────────────────────
-        self._btn_generer = QPushButton("📄 &Générer le rapport")
+        self._btn_generer = QPushButton("📄 &Générer le rapport complet")
         self._btn_generer.setMinimumHeight(44)
         self._btn_generer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._btn_generer.setStyleSheet(
-            "QPushButton{background:#1a3a5c;color:white;font-size:14px;"
-            "border-radius:6px;padding:8px 24px;}"
+            "QPushButton{background:#1a3a5c;color:white;font-size:13px;"
+            "border-radius:6px;padding:8px;}"
             "QPushButton:hover{background:#2a5a8c;}"
             "QPushButton:disabled{background:#aaa;}"
         )
-        configurer_bouton(self._btn_generer, "Générer le rapport Word")
+        configurer_bouton(self._btn_generer, "Générer le rapport Word et PDF")
         self._btn_generer.clicked.connect(self._generer_rapport)
-        layout.addWidget(self._btn_generer)
+        lay_d.addWidget(self._btn_generer)
 
         self._barre_prog = QProgressBar()
         self._barre_prog.setVisible(False)
         self._barre_prog.setRange(0, 0)
         self._barre_prog.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        layout.addWidget(self._barre_prog)
+        lay_d.addWidget(self._barre_prog)
 
         self._lbl_status = QLabel("")
         self._lbl_status.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        layout.addWidget(self._lbl_status)
+        lay_d.addWidget(self._lbl_status)
+
+        self._splitter.addWidget(panneau_droit)
+
+        # Proportions initiales : 45% / 55%
+        self._splitter.setStretchFactor(0, 45)
+        self._splitter.setStretchFactor(1, 55)
+        self._splitter.setSizes([440, 540])
+
+        layout.addWidget(self._splitter, stretch=1)
+
+    # ── Slots ─────────────────────────────────────────────────────────────
 
     def set_exercice(self, exercice: Exercice):
         self._exercice = exercice
-        d = self._date_debut.date()
         self._date_debut.setDate(QDate(exercice.annee, 1, 1))
         self._date_fin.setDate(QDate(exercice.annee, 12, 31))
+        # Mettre à jour la liste des projets
+        self._combo_projet.clear()
+        self._combo_projet.addItem("Tous les projets", None)
+        for projet in self._analytique.projets_actifs():
+            self._combo_projet.addItem(projet.nom, projet.id)
 
-    def set_config(self, config):
+    def set_config(self, config: dict):
         self._config = config
 
     def _get_periode(self):
@@ -194,56 +428,108 @@ class ReportWidget(QWidget):
         f = self._date_fin.date()
         return date(d.year(), d.month(), d.day()), date(f.year(), f.month(), f.day())
 
-    def _calculer_apercu(self):
+    def _calculer(self):
+        """Calcule le compte de résultat et met à jour aperçu + graphique."""
         if not self._exercice:
-            self._lbl_apercu.setPlainText("Aucun exercice chargé.")
+            self._lbl_apercu.setPlainText("Aucun exercice chargé. Importez des relevés (Alt+1).")
             return
+
         debut, fin = self._get_periode()
-        cr = self._exercice.calculer_compte_resultat(self._moteur, debut, fin)
+        projet_id = self._combo_projet.currentData()
+
+        # Exclure les prêts du compte de résultat
+        tx_cr = [t for t in self._exercice.transactions
+                 if t.categorie_id != "pret_recu"]
+
+        self._cr_cache = CompteResultat(
+            self._moteur, tx_cr, debut, fin,
+            projet_id=projet_id,
+            solde_initial=self._exercice.solde_initial,
+        )
+        cr = self._cr_cache
+
+        # Aperçu textuel
         lignes = [
             f"Période : {debut.strftime('%d/%m/%Y')} → {fin.strftime('%d/%m/%Y')}",
-            f"Transactions analysées : {len(cr._transactions_periode)}",
-            f"Non catégorisées : {len(cr.transactions_non_categorisees)}",
+            f"Transactions : {len(cr._transactions_periode)}  "
+            f"|  Non cat. : {len(cr.transactions_non_categorisees)}",
             "",
             "RECETTES :",
         ]
         for l in cr.lignes_recettes:
             lignes.append(
-                f"  {l.label:<42} {float(l.montant):>10,.2f} €  ({l.pourcentage:.1f}%)"
+                f"  {l.label:<40} {float(l.montant):>10,.2f} €  ({l.pourcentage:.1f}%)"
             )
-        lignes.append(f"  {'TOTAL RECETTES':<42} {float(cr.total_recettes):>10,.2f} €")
+        lignes.append(f"  {'TOTAL RECETTES':<40} {float(cr.total_recettes):>10,.2f} €")
         lignes.extend(["", "DÉPENSES :"])
         for l in cr.lignes_depenses:
             lignes.append(
-                f"  {l.label:<42} {float(l.montant):>10,.2f} €  ({l.pourcentage:.1f}%)"
+                f"  {l.label:<40} {float(l.montant):>10,.2f} €  ({l.pourcentage:.1f}%)"
             )
-        lignes.append(f"  {'TOTAL DÉPENSES':<42} {float(cr.total_depenses):>10,.2f} €")
+        lignes.append(f"  {'TOTAL DÉPENSES':<40} {float(cr.total_depenses):>10,.2f} €")
         signe = "+" if cr.est_excedentaire else ""
-        lignes.extend(["", f"  {'RÉSULTAT NET':<42} {signe}{float(cr.resultat_net):>10,.2f} €"])
+        lignes.extend([
+            "",
+            f"  {'RÉSULTAT NET':<40} {signe}{float(cr.resultat_net):>10,.2f} €",
+            f"  {'Solde estimé fin de période':<40} {float(cr.solde_final):>10,.2f} €",
+        ])
         self._lbl_apercu.setPlainText("\n".join(lignes))
+
+        # Mettre à jour le graphique
+        self._mettre_a_jour_graphique()
+
+    def _mettre_a_jour_graphique(self):
+        """Redessine le graphique selon le type sélectionné et le compte de résultat en cache."""
+        if not self._cr_cache:
+            return
+
+        cr = self._cr_cache
+        cp = self._config.get("couleur_principale", "#1a3a5c")
+        cs = self._config.get("couleur_secondaire", "#e8f0f7")
+        type_key = self._combo_type_graph.currentData()
+
+        if type_key == "camembert_recettes":
+            self._canvas.tracer_camembert(
+                cr.lignes_recettes, "Répartition des recettes", cp
+            )
+        elif type_key == "camembert_depenses":
+            self._canvas.tracer_camembert(
+                cr.lignes_depenses, "Répartition des dépenses", cp
+            )
+        elif type_key == "histogramme":
+            self._canvas.tracer_histogramme(cr.evolution_mensuelle(), cp, cs)
+        elif type_key == "courbe_tresorerie":
+            self._canvas.tracer_courbe(
+                cr.evolution_mensuelle(), cr.solde_initial, cp, cs
+            )
 
     def _generer_rapport(self):
         if not self._exercice:
-            QMessageBox.warning(self, "Aucun exercice", "Importez d'abord un exercice (Alt+1).")
+            QMessageBox.warning(self, "Aucun exercice",
+                                "Importez d'abord un exercice (Alt+1).")
             return
-        debut, fin = self._get_periode()
-        nom = (f"Rapport_{self._exercice.annee}.docx" if self._radio_annuel.isChecked()
-               else f"Rapport_{debut.strftime('%Y%m%d')}_{fin.strftime('%Y%m%d')}.docx")
+        if not self._cr_cache:
+            self._calculer()
+
+        nom = (f"Rapport_{self._exercice.annee}.docx"
+               if self._radio_annuel.isChecked()
+               else "Rapport_intermediaire.docx")
         chemin, _ = QFileDialog.getSaveFileName(
             self, "Enregistrer le rapport",
             str(Path.home() / nom), "Documents Word (*.docx)",
         )
         if not chemin:
             return
-        cr = self._exercice.calculer_compte_resultat(self._moteur, debut, fin)
+
         reporter = DocxReporter(self._config, self._moteur)
         self._btn_generer.setEnabled(False)
         self._barre_prog.setVisible(True)
         self._lbl_status.setText("Génération en cours…")
+
         self._thread = QThread()
         self._worker = WorkerRapport(
-            reporter, cr, chemin, self._chk_pdf.isChecked(),
-            self._analytique, self._exercice,
+            reporter, self._cr_cache, chemin,
+            self._chk_pdf.isChecked(), self._analytique, self._exercice,
         )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -257,14 +543,14 @@ class ReportWidget(QWidget):
     def _on_termine(self, chemin):
         self._btn_generer.setEnabled(True)
         self._barre_prog.setVisible(False)
-        self._lbl_status.setText(f"Rapport généré : {Path(chemin).name}")
+        self._lbl_status.setText(f"Rapport : {Path(chemin).name}")
         self.message_status.emit(f"Rapport généré : {Path(chemin).name}")
         QMessageBox.information(self, "Rapport généré",
-            f"Rapport généré avec succès :\n\n{chemin}")
+                                f"Rapport généré avec succès :\n\n{chemin}")
         os.startfile(chemin)
 
     def _on_erreur(self, erreur):
         self._btn_generer.setEnabled(True)
         self._barre_prog.setVisible(False)
         self._lbl_status.setText(f"Erreur : {erreur}")
-        QMessageBox.critical(self, "Erreur", f"Erreur lors de la génération :\n\n{erreur}")
+        QMessageBox.critical(self, "Erreur", f"Erreur :\n\n{erreur}")
