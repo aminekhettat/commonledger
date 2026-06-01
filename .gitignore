@@ -6,6 +6,9 @@
 config/association.json
 config/confidential.py
 
+# Assets de l'association (logo, images — spécifiques à chaque asso)
+config/assets/
+
 # Données comptables (transactions, relevés copiés)
 data/
 
