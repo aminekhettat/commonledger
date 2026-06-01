@@ -12,13 +12,13 @@ ET les transactions éclatées (splits).
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Optional
 
+from ..categorizer.rules_engine import Categorie, MoteurCategorisation
 from ..parser.models import Transaction
-from ..categorizer.rules_engine import MoteurCategorisation, Categorie
 
 
 @dataclass
@@ -33,6 +33,7 @@ class LigneResultat:
         nb_transactions:Nombre de transactions ou splits concernés.
         transactions:   Liste des transactions contribuant à cette ligne.
     """
+
     categorie: Categorie
     montant: Decimal = Decimal("0")
     pourcentage: float = 0.0
@@ -59,6 +60,7 @@ class AlerteCoherence:
         solde_releve:  Solde indiqué sur le relevé bancaire.
         ecart:         Différence (solde_calcule - solde_releve).
     """
+
     date_releve: date
     solde_calcule: Decimal
     solde_releve: Decimal
@@ -89,8 +91,8 @@ class CompteResultat:
         transactions: list[Transaction],
         date_debut: date,
         date_fin: date,
-        projet_id: Optional[str] = None,
-        solde_initial: Optional[Decimal] = None,
+        projet_id: str | None = None,
+        solde_initial: Decimal | None = None,
     ):
         """
         Initialise et calcule le compte de résultat.
@@ -129,9 +131,9 @@ class CompteResultat:
 
             if self.projet_id:
                 # Inclure si la transaction ou l'un de ses splits correspond au projet
-                if t.projet_id == self.projet_id:
-                    result.append(t)
-                elif any(s.projet_id == self.projet_id for s in t.splits):
+                if t.projet_id == self.projet_id or any(
+                    s.projet_id == self.projet_id for s in t.splits
+                ):
                     result.append(t)
             else:
                 result.append(t)
@@ -150,13 +152,9 @@ class CompteResultat:
                 continue
 
             if transaction.est_splittee:
-                self._traiter_transaction_splittee(
-                    transaction, recettes_par_cat, depenses_par_cat
-                )
+                self._traiter_transaction_splittee(transaction, recettes_par_cat, depenses_par_cat)
             else:
-                self._traiter_transaction_simple(
-                    transaction, recettes_par_cat, depenses_par_cat
-                )
+                self._traiter_transaction_simple(transaction, recettes_par_cat, depenses_par_cat)
 
         # Construire les lignes du compte de résultat
         self.lignes_recettes = self._construire_lignes(recettes_par_cat, "recettes")
@@ -213,6 +211,7 @@ class CompteResultat:
             if not cat:
                 # Catégorie inconnue (supprimée depuis la config) : créer une entrée générique
                 from ..categorizer.rules_engine import Categorie
+
                 cat = Categorie(id=cat_id, label=f"[{cat_id}]", type=type_cat)
 
             total = sum(m for m, _ in items)
@@ -226,12 +225,14 @@ class CompteResultat:
                     vues.add(t.id_unique)
                     transactions_uniques.append(t)
 
-            lignes.append(LigneResultat(
-                categorie=cat,
-                montant=total,
-                nb_transactions=len(transactions),
-                transactions=transactions_uniques,
-            ))
+            lignes.append(
+                LigneResultat(
+                    categorie=cat,
+                    montant=total,
+                    nb_transactions=len(transactions),
+                    transactions=transactions_uniques,
+                )
+            )
 
         return sorted(lignes, key=lambda l: l.montant, reverse=True)
 
@@ -241,13 +242,9 @@ class CompteResultat:
         total_d = self.total_depenses
 
         for ligne in self.lignes_recettes:
-            ligne.pourcentage = (
-                float(ligne.montant / total_r * 100) if total_r else 0.0
-            )
+            ligne.pourcentage = float(ligne.montant / total_r * 100) if total_r else 0.0
         for ligne in self.lignes_depenses:
-            ligne.pourcentage = (
-                float(ligne.montant / total_d * 100) if total_d else 0.0
-            )
+            ligne.pourcentage = float(ligne.montant / total_d * 100) if total_d else 0.0
 
     @property
     def total_recettes(self) -> Decimal:
@@ -313,13 +310,15 @@ class CompteResultat:
             cle = (annee, mois)
             r = mois_recettes.get(cle, Decimal("0"))
             d = mois_depenses.get(cle, Decimal("0"))
-            resultats.append({
-                "annee": annee,
-                "mois": mois,
-                "recettes": r,
-                "depenses": d,
-                "resultat": r - d,
-            })
+            resultats.append(
+                {
+                    "annee": annee,
+                    "mois": mois,
+                    "recettes": r,
+                    "depenses": d,
+                    "resultat": r - d,
+                }
+            )
 
         return resultats
 
@@ -349,12 +348,14 @@ class CompteResultat:
 
             ecart = solde_courant - releve.solde_fin
             if abs(ecart) > Decimal("0.01"):
-                alertes.append(AlerteCoherence(
-                    date_releve=releve.periode_fin,
-                    solde_calcule=solde_courant,
-                    solde_releve=releve.solde_fin,
-                    ecart=ecart,
-                ))
+                alertes.append(
+                    AlerteCoherence(
+                        date_releve=releve.periode_fin,
+                        solde_calcule=solde_courant,
+                        solde_releve=releve.solde_fin,
+                        ecart=ecart,
+                    )
+                )
 
         self.alertes_coherence = alertes
         return alertes

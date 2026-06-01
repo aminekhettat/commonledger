@@ -6,10 +6,10 @@ le moteur de catégorisation et les modules comptables.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Optional
 
 
 class ParseError(Exception):
@@ -41,11 +41,11 @@ class Transaction:
     date: date
     libelle: str
     montant: Decimal
-    solde_apres: Optional[Decimal] = None
+    solde_apres: Decimal | None = None
     source_fichier: str = ""
     id_unique: str = ""
-    categorie_id: Optional[str] = None
-    projet_id: Optional[str] = None
+    categorie_id: str | None = None
+    projet_id: str | None = None
     memo: str = ""
     splits: list[TransactionSplit] = field(default_factory=list)
     details: dict = field(default_factory=dict)
@@ -151,7 +151,7 @@ class TransactionSplit:
 
     montant: Decimal
     categorie_id: str
-    projet_id: Optional[str] = None
+    projet_id: str | None = None
     memo: str = ""
     details: dict = field(default_factory=dict)
 
@@ -192,10 +192,10 @@ class ReleveInfo:
     """
 
     fichier: str
-    periode_debut: Optional[date] = None
-    periode_fin: Optional[date] = None
-    solde_debut: Optional[Decimal] = None
-    solde_fin: Optional[Decimal] = None
+    periode_debut: date | None = None
+    periode_fin: date | None = None
+    solde_debut: Decimal | None = None
+    solde_fin: Decimal | None = None
     numero_compte: str = ""
     transactions: list[Transaction] = field(default_factory=list)
     valide: bool = False

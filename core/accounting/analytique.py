@@ -12,6 +12,7 @@ différents projets.
 """
 
 from __future__ import annotations
+
 import json
 import logging
 import uuid
@@ -19,7 +20,6 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
 
 from ..parser.models import Transaction
 
@@ -41,10 +41,11 @@ class Projet:
         actif:        True si le projet est actif (accepte de nouvelles transactions).
         couleur:      Couleur hexadécimale pour l'affichage.
     """
+
     nom: str
     description: str = ""
-    date_debut: Optional[date] = None
-    date_fin: Optional[date] = None
+    date_debut: date | None = None
+    date_fin: date | None = None
     budget: Decimal = Decimal("0")
     actif: bool = True
     couleur: str = "#1565C0"
@@ -87,6 +88,7 @@ class BilanProjet:
         depenses:    Total des dépenses affectées au projet.
         transactions:Toutes les transactions (ou parts de splits) du projet.
     """
+
     projet: Projet
     recettes: Decimal = Decimal("0")
     depenses: Decimal = Decimal("0")
@@ -97,7 +99,7 @@ class BilanProjet:
         return self.recettes - self.depenses
 
     @property
-    def taux_realisation_budget(self) -> Optional[float]:
+    def taux_realisation_budget(self) -> float | None:
         """Taux de réalisation du budget (dépenses / budget) en %."""
         if self.projet.budget and self.projet.budget > 0:
             return float(self.depenses / self.projet.budget * 100)
@@ -137,10 +139,7 @@ class ComptaAnalytique:
         with open(self.chemin, encoding="utf-8") as f:
             data = json.load(f)
 
-        self.projets = {
-            p["id"]: Projet.from_dict(p)
-            for p in data.get("projets", [])
-        }
+        self.projets = {p["id"]: Projet.from_dict(p) for p in data.get("projets", [])}
 
     def sauvegarder(self) -> None:
         """Persiste les projets dans le fichier JSON."""
@@ -152,7 +151,7 @@ class ComptaAnalytique:
     def creer_projet(
         self,
         nom: str,
-        date_debut: Optional[date] = None,
+        date_debut: date | None = None,
         description: str = "",
         budget: Decimal = Decimal("0"),
     ) -> Projet:
@@ -218,7 +217,7 @@ class ComptaAnalytique:
         del self.projets[projet_id]
         self.sauvegarder()
 
-    def get_projet(self, projet_id: str) -> Optional[Projet]:
+    def get_projet(self, projet_id: str) -> Projet | None:
         """Retourne un projet par son id, ou None s'il est inconnu."""
         return self.projets.get(projet_id)
 
@@ -283,9 +282,7 @@ class ComptaAnalytique:
 
         return bilan
 
-    def calculer_tous_bilans(
-        self, transactions: list[Transaction], moteur
-    ) -> list[BilanProjet]:
+    def calculer_tous_bilans(self, transactions: list[Transaction], moteur) -> list[BilanProjet]:
         """
         Calcule le bilan de tous les projets actifs.
 
@@ -296,8 +293,5 @@ class ComptaAnalytique:
         Returns:
             Liste de BilanProjet, triée par résultat décroissant.
         """
-        bilans = [
-            self.calculer_bilan(p.id, transactions, moteur)
-            for p in self.projets.values()
-        ]
+        bilans = [self.calculer_bilan(p.id, transactions, moteur) for p in self.projets.values()]
         return sorted(bilans, key=lambda b: b.resultat, reverse=True)

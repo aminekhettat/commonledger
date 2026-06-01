@@ -8,12 +8,9 @@ Organisation :
 """
 
 import json
-import os
-import tempfile
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Generator
 
 import pytest
 

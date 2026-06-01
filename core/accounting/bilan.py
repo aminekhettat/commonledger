@@ -33,18 +33,19 @@ Les classes Immobilisation et LigneBilan permettent d'étendre au besoin.
 """
 
 from __future__ import annotations
+
 import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 # ── Immobilisations ───────────────────────────────────────────────────────────
+
 
 @dataclass
 class Immobilisation:
@@ -64,12 +65,13 @@ class Immobilisation:
         actif:         False si le bien a été cédé ou mis au rebut.
         notes:         Remarques libres.
     """
+
     id: str
     designation: str
     categorie: str = "matériel"
-    date_achat: Optional[date] = None
+    date_achat: date | None = None
     valeur_brute: Decimal = Decimal("0")
-    duree_amort: int = 5          # années — durée standard matériel associatif
+    duree_amort: int = 5  # années — durée standard matériel associatif
     amort_cumule: Decimal = Decimal("0")
     actif: bool = True
     notes: str = ""
@@ -96,14 +98,14 @@ class Immobilisation:
         """
         if not self.date_achat or self.valeur_brute == 0:
             return Decimal("0")
-        annees_ecoulees = (
-            (date_cloture.year - self.date_achat.year)
-            + (date_cloture.month - self.date_achat.month) / 12
-        )
+        annees_ecoulees = (date_cloture.year - self.date_achat.year) + (
+            date_cloture.month - self.date_achat.month
+        ) / 12
         amort = min(
             self.valeur_brute,
-            (self.valeur_brute * Decimal(str(annees_ecoulees)) / Decimal(str(self.duree_amort)))
-            .quantize(Decimal("0.01"))
+            (
+                self.valeur_brute * Decimal(str(annees_ecoulees)) / Decimal(str(self.duree_amort))
+            ).quantize(Decimal("0.01")),
         )
         return amort
 
@@ -123,6 +125,7 @@ class Immobilisation:
     @classmethod
     def from_dict(cls, d: dict) -> Immobilisation:
         import uuid
+
         return cls(
             id=d.get("id", str(uuid.uuid4())[:8]),
             designation=d["designation"],
@@ -138,9 +141,11 @@ class Immobilisation:
 
 # ── Bilan simplifié ───────────────────────────────────────────────────────────
 
+
 @dataclass
 class LigneBilan:
     """Une ligne du tableau du bilan avec label, montant et éventuelle sous-décomposition."""
+
     label: str
     montant: Decimal = Decimal("0")
     sous_lignes: list[LigneBilan] = field(default_factory=list)
@@ -162,29 +167,29 @@ class Bilan:
     immobilisations_nettes: Decimal = Decimal("0")
 
     # Actif circulant
-    creances_adherents: Decimal = Decimal("0")    # cotisations dues non encaissées
-    autres_creances: Decimal = Decimal("0")       # autres créances
+    creances_adherents: Decimal = Decimal("0")  # cotisations dues non encaissées
+    autres_creances: Decimal = Decimal("0")  # autres créances
 
     # Disponibilités
-    solde_bancaire: Decimal = Decimal("0")        # solde compte(s) bancaire(s)
-    caisse: Decimal = Decimal("0")                # fonds de caisse
+    solde_bancaire: Decimal = Decimal("0")  # solde compte(s) bancaire(s)
+    caisse: Decimal = Decimal("0")  # fonds de caisse
 
     # ── PASSIF ────────────────────────────────────────────────────────────
     # Fonds propres
-    fonds_associatifs: Decimal = Decimal("0")     # capital social / fonds initiaux
-    report_a_nouveau: Decimal = Decimal("0")      # résultat(s) exercice(s) antérieur(s)
-    resultat_exercice: Decimal = Decimal("0")     # résultat net de l'exercice courant
+    fonds_associatifs: Decimal = Decimal("0")  # capital social / fonds initiaux
+    report_a_nouveau: Decimal = Decimal("0")  # résultat(s) exercice(s) antérieur(s)
+    resultat_exercice: Decimal = Decimal("0")  # résultat net de l'exercice courant
 
     # Fonds dédiés
-    subventions_affectees: Decimal = Decimal("0") # subventions avec obligation d'emploi
+    subventions_affectees: Decimal = Decimal("0")  # subventions avec obligation d'emploi
 
     # Dettes
     emprunts_prets_recus: Decimal = Decimal("0")  # prêts reçus non remboursés
-    dettes_fournisseurs: Decimal = Decimal("0")   # factures à payer
-    autres_dettes: Decimal = Decimal("0")         # autres dettes
+    dettes_fournisseurs: Decimal = Decimal("0")  # factures à payer
+    autres_dettes: Decimal = Decimal("0")  # autres dettes
 
     # Métadonnées
-    date_cloture: Optional[date] = None
+    date_cloture: date | None = None
     annee: int = 0
 
     # ── Calculs ──────────────────────────────────────────────────────────
@@ -203,27 +208,19 @@ class Bilan:
 
     @property
     def total_actif(self) -> Decimal:
-        return (self.total_immobilisations
-                + self.total_actif_circulant
-                + self.total_disponibilites)
+        return self.total_immobilisations + self.total_actif_circulant + self.total_disponibilites
 
     @property
     def total_fonds_propres(self) -> Decimal:
-        return (self.fonds_associatifs
-                + self.report_a_nouveau
-                + self.resultat_exercice)
+        return self.fonds_associatifs + self.report_a_nouveau + self.resultat_exercice
 
     @property
     def total_dettes(self) -> Decimal:
-        return (self.emprunts_prets_recus
-                + self.dettes_fournisseurs
-                + self.autres_dettes)
+        return self.emprunts_prets_recus + self.dettes_fournisseurs + self.autres_dettes
 
     @property
     def total_passif(self) -> Decimal:
-        return (self.total_fonds_propres
-                + self.subventions_affectees
-                + self.total_dettes)
+        return self.total_fonds_propres + self.subventions_affectees + self.total_dettes
 
     @property
     def ecart_equilibre(self) -> Decimal:
@@ -242,9 +239,9 @@ class Bilan:
 
         # Immobilisations
         if self.immobilisations_nettes > 0:
-            lignes.append(LigneBilan(
-                "Immobilisations nettes", self.immobilisations_nettes, gras=False
-            ))
+            lignes.append(
+                LigneBilan("Immobilisations nettes", self.immobilisations_nettes, gras=False)
+            )
 
         # Actif circulant
         if self.total_actif_circulant > 0:
@@ -253,18 +250,18 @@ class Bilan:
                 sous.append(LigneBilan("Cotisations dues", self.creances_adherents))
             if self.autres_creances > 0:
                 sous.append(LigneBilan("Autres créances", self.autres_creances))
-            lignes.append(LigneBilan(
-                "Actif circulant", self.total_actif_circulant, sous_lignes=sous
-            ))
+            lignes.append(
+                LigneBilan("Actif circulant", self.total_actif_circulant, sous_lignes=sous)
+            )
 
         # Disponibilités
         sous_dispo = []
         sous_dispo.append(LigneBilan("Compte bancaire", self.solde_bancaire))
         if self.caisse > 0:
             sous_dispo.append(LigneBilan("Caisse", self.caisse))
-        lignes.append(LigneBilan(
-            "Disponibilités", self.total_disponibilites, sous_lignes=sous_dispo
-        ))
+        lignes.append(
+            LigneBilan("Disponibilités", self.total_disponibilites, sous_lignes=sous_dispo)
+        )
 
         lignes.append(LigneBilan("TOTAL ACTIF", self.total_actif, gras=True))
         return lignes
@@ -282,15 +279,13 @@ class Bilan:
                 self.resultat_exercice,
             ),
         ]
-        lignes.append(LigneBilan(
-            "Fonds propres", self.total_fonds_propres, sous_lignes=sous_fp
-        ))
+        lignes.append(LigneBilan("Fonds propres", self.total_fonds_propres, sous_lignes=sous_fp))
 
         # Fonds dédiés
         if self.subventions_affectees > 0:
-            lignes.append(LigneBilan(
-                "Subventions affectées (fonds dédiés)", self.subventions_affectees
-            ))
+            lignes.append(
+                LigneBilan("Subventions affectées (fonds dédiés)", self.subventions_affectees)
+            )
 
         # Dettes
         if self.total_dettes > 0:
@@ -301,9 +296,7 @@ class Bilan:
                 sous_det.append(LigneBilan("Dettes fournisseurs", self.dettes_fournisseurs))
             if self.autres_dettes > 0:
                 sous_det.append(LigneBilan("Autres dettes", self.autres_dettes))
-            lignes.append(LigneBilan(
-                "Dettes", self.total_dettes, sous_lignes=sous_det
-            ))
+            lignes.append(LigneBilan("Dettes", self.total_dettes, sous_lignes=sous_det))
 
         lignes.append(LigneBilan("TOTAL PASSIF", self.total_passif, gras=True))
         return lignes
@@ -328,8 +321,7 @@ class GestionnaireBilan:
             with open(chemin_immo, encoding="utf-8") as f:
                 data = json.load(f)
             self.immobilisations = [
-                Immobilisation.from_dict(d)
-                for d in data.get("immobilisations", [])
+                Immobilisation.from_dict(d) for d in data.get("immobilisations", [])
             ]
 
     def sauvegarder(self) -> None:
@@ -349,13 +341,9 @@ class GestionnaireBilan:
 
     def dotation_annuelle(self) -> Decimal:
         """Dotation totale aux amortissements de l'exercice."""
-        return sum(
-            i.calculer_amortissement_annuel()
-            for i in self.immobilisations
-            if i.actif
-        )
+        return sum(i.calculer_amortissement_annuel() for i in self.immobilisations if i.actif)
 
-    def immobilisations_nettes(self, date_cloture: Optional[date] = None) -> Decimal:
+    def immobilisations_nettes(self, date_cloture: date | None = None) -> Decimal:
         """Valeur nette comptable totale des immobilisations."""
         d = date_cloture or date.today()
         total = Decimal("0")
@@ -368,7 +356,7 @@ class GestionnaireBilan:
     def construire_bilan(
         self,
         annee: int,
-        compte_resultat,      # CompteResultat
+        compte_resultat,  # CompteResultat
         solde_bancaire: Decimal,
         caisse: Decimal = Decimal("0"),
         fonds_associatifs: Decimal = Decimal("0"),

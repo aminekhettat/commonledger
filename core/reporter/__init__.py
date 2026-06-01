@@ -6,8 +6,9 @@ Classes exportées:
     PdfReporter:  Convertit le rapport Word en PDF.
     GraphiquesMaker: Génère les graphiques matplotlib.
 """
+
+from .csv_reporter import CsvReporter
 from .docx_reporter import DocxReporter
 from .graphiques import GraphiquesMaker
-from .csv_reporter import CsvReporter
 
 __all__ = ["DocxReporter", "GraphiquesMaker", "CsvReporter"]

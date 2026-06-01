@@ -25,7 +25,6 @@ import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
 
 from ..parser.models import Transaction, TransactionSplit
 
@@ -45,8 +44,7 @@ def _normaliser(texte: str) -> str:
     texte = texte.upper()
     # Supprimer les accents
     texte = "".join(
-        c for c in unicodedata.normalize("NFD", texte)
-        if unicodedata.category(c) != "Mn"
+        c for c in unicodedata.normalize("NFD", texte) if unicodedata.category(c) != "Mn"
     )
     # Remplacer ponctuation par espace
     texte = "".join(c if c.isalnum() else " " for c in texte)
@@ -69,6 +67,7 @@ class Categorie:
         champs_details:   Noms des champs à renseigner si details_requis.
         couleur_graphique:Couleur hexadécimale pour les graphiques.
     """
+
     id: str
     label: str
     description: str = ""
@@ -99,7 +98,8 @@ class ResultatCategorisation:
         mot_cle_match:  Mot-clé qui a déclenché la reconnaissance.
         automatique:    True si catégorisé automatiquement, False si manuel.
     """
-    categorie_id: Optional[str] = None
+
+    categorie_id: str | None = None
     score: float = 0.0
     mot_cle_match: str = ""
     automatique: bool = True
@@ -249,9 +249,7 @@ class MoteurCategorisation:
             automatique=True,
         )
 
-    def categoriser_lot(
-        self, transactions: list[Transaction], seuil_auto: float = 0.3
-    ) -> dict:
+    def categoriser_lot(self, transactions: list[Transaction], seuil_auto: float = 0.3) -> dict:
         """
         Catégorise un lot de transactions.
 
@@ -305,7 +303,7 @@ class MoteurCategorisation:
     def creer_split(
         self,
         transaction: Transaction,
-        ventilations: list[tuple[str, Decimal, Optional[str]]],
+        ventilations: list[tuple[str, Decimal, str | None]],
     ) -> None:
         """
         Éclate une transaction en sous-ventilations.
@@ -395,6 +393,6 @@ class MoteurCategorisation:
         del self.categories[cat_id]
         self.sauvegarder()
 
-    def get_categorie(self, cat_id: str) -> Optional[Categorie]:
+    def get_categorie(self, cat_id: str) -> Categorie | None:
         """Retourne une catégorie par son id, ou None si inconnue."""
         return self.categories.get(cat_id)

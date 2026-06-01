@@ -1,15 +1,11 @@
 """Tests du parseur La Banque Postale."""
 
-import re
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.parser.la_poste_parser import LaPosteParser, _normaliser_pdf_texte, _parse_montant
-from core.parser.models import ParseError
 
 
 class TestParseMontant:

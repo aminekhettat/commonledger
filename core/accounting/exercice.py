@@ -12,18 +12,17 @@ data/exercices/<annee>/.
 """
 
 from __future__ import annotations
+
 import json
 import logging
 import shutil
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
 
-from ..parser.models import Transaction, ReleveInfo
 from ..categorizer.rules_engine import MoteurCategorisation
+from ..parser.models import ReleveInfo, Transaction
 from .compte_resultat import CompteResultat
-from .analytique import ComptaAnalytique
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +109,7 @@ class Exercice:
             Nombre de nouvelles transactions ajoutées.
         """
         ids_existants = {t.id_unique for t in self.transactions}
-        nouvelles = [
-            t for t in releve.transactions
-            if t.id_unique not in ids_existants
-        ]
+        nouvelles = [t for t in releve.transactions if t.id_unique not in ids_existants]
 
         self.transactions.extend(nouvelles)
         self.transactions.sort(key=lambda t: t.date)
@@ -145,9 +141,9 @@ class Exercice:
     def calculer_compte_resultat(
         self,
         moteur: MoteurCategorisation,
-        date_debut: Optional[date] = None,
-        date_fin: Optional[date] = None,
-        projet_id: Optional[str] = None,
+        date_debut: date | None = None,
+        date_fin: date | None = None,
+        projet_id: str | None = None,
     ) -> CompteResultat:
         """
         Calcule le compte de résultat pour tout ou partie de l'exercice.
@@ -188,7 +184,7 @@ class Exercice:
         """
         self.budget[cat_id] = abs(montant)
 
-    def ecart_budget(self, cat_id: str, montant_reel: Decimal) -> Optional[Decimal]:
+    def ecart_budget(self, cat_id: str, montant_reel: Decimal) -> Decimal | None:
         """
         Calcule l'écart entre le réalisé et le budgété.
 
@@ -213,7 +209,6 @@ class Exercice:
             "nb_releves_importes": len(self.releves),
             "solde_initial": self.solde_initial,
             "taux_categorisation": (
-                round((1 - non_cat / len(self.transactions)) * 100, 1)
-                if self.transactions else 0.0
+                round((1 - non_cat / len(self.transactions)) * 100, 1) if self.transactions else 0.0
             ),
         }

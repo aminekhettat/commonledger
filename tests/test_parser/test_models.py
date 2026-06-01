@@ -1,12 +1,9 @@
 """Tests du module core.parser.models."""
 
-import json
 from datetime import date
 from decimal import Decimal
 
-import pytest
-
-from core.parser.models import ParseError, ReleveInfo, Transaction, TransactionSplit
+from core.parser.models import ReleveInfo, Transaction, TransactionSplit
 
 
 class TestTransaction:

@@ -16,9 +16,7 @@ Format :
 
 import csv
 import logging
-from datetime import date
 from pathlib import Path
-from typing import Optional
 
 from ..accounting.compte_resultat import CompteResultat
 from ..categorizer.rules_engine import MoteurCategorisation
@@ -76,60 +74,74 @@ class CsvReporter:
             writer = csv.writer(f)
 
             # En-tête
-            writer.writerow([
-                "Type", "Catégorie", "Montant (€)", "Part (%)", "Nb opérations"
-            ])
+            writer.writerow(["Type", "Catégorie", "Montant (€)", "Part (%)", "Nb opérations"])
 
             # Recettes
             for ligne in self.cr.lignes_recettes:
-                writer.writerow([
-                    "Recette",
-                    ligne.label,
-                    f"{float(ligne.montant):.2f}",
-                    f"{ligne.pourcentage:.1f}",
-                    ligne.nb_transactions,
-                ])
+                writer.writerow(
+                    [
+                        "Recette",
+                        ligne.label,
+                        f"{float(ligne.montant):.2f}",
+                        f"{ligne.pourcentage:.1f}",
+                        ligne.nb_transactions,
+                    ]
+                )
 
             # Sous-total recettes
-            writer.writerow([
-                "TOTAL RECETTES", "",
-                f"{float(self.cr.total_recettes):.2f}",
-                "100.0", "",
-            ])
+            writer.writerow(
+                [
+                    "TOTAL RECETTES",
+                    "",
+                    f"{float(self.cr.total_recettes):.2f}",
+                    "100.0",
+                    "",
+                ]
+            )
 
             writer.writerow([])  # ligne vide
 
             # Dépenses
             for ligne in self.cr.lignes_depenses:
-                writer.writerow([
-                    "Dépense",
-                    ligne.label,
-                    f"{float(ligne.montant):.2f}",
-                    f"{ligne.pourcentage:.1f}",
-                    ligne.nb_transactions,
-                ])
+                writer.writerow(
+                    [
+                        "Dépense",
+                        ligne.label,
+                        f"{float(ligne.montant):.2f}",
+                        f"{ligne.pourcentage:.1f}",
+                        ligne.nb_transactions,
+                    ]
+                )
 
             # Sous-total dépenses
-            writer.writerow([
-                "TOTAL DÉPENSES", "",
-                f"{float(self.cr.total_depenses):.2f}",
-                "100.0", "",
-            ])
+            writer.writerow(
+                [
+                    "TOTAL DÉPENSES",
+                    "",
+                    f"{float(self.cr.total_depenses):.2f}",
+                    "100.0",
+                    "",
+                ]
+            )
 
             writer.writerow([])
 
             # Résultat net
             signe = "+" if self.cr.est_excedentaire else ""
-            writer.writerow([
-                "RÉSULTAT NET", "",
-                f"{signe}{float(self.cr.resultat_net):.2f}",
-                "", "",
-            ])
+            writer.writerow(
+                [
+                    "RÉSULTAT NET",
+                    "",
+                    f"{signe}{float(self.cr.resultat_net):.2f}",
+                    "",
+                    "",
+                ]
+            )
 
             # Informations de période
             writer.writerow([])
             writer.writerow(["Période début", self.cr.date_debut.strftime("%d/%m/%Y")])
-            writer.writerow(["Période fin",   self.cr.date_fin.strftime("%d/%m/%Y")])
+            writer.writerow(["Période fin", self.cr.date_fin.strftime("%d/%m/%Y")])
             writer.writerow(["Solde initial", f"{float(self.cr.solde_initial):.2f}"])
             writer.writerow(["Solde final estimé", f"{float(self.cr.solde_final):.2f}"])
             nc = len(self.cr.transactions_non_categorisees)
@@ -142,10 +154,18 @@ class CsvReporter:
             writer = csv.writer(f)
 
             # En-tête
-            writer.writerow([
-                "Date", "Libellé", "Montant (€)", "Type", "Catégorie",
-                "Projet", "Mémo", "Fichier source"
-            ])
+            writer.writerow(
+                [
+                    "Date",
+                    "Libellé",
+                    "Montant (€)",
+                    "Type",
+                    "Catégorie",
+                    "Projet",
+                    "Mémo",
+                    "Fichier source",
+                ]
+            )
 
             # Toutes les transactions catégorisées de la période
             txs = sorted(self.cr._transactions_periode, key=lambda t: t.date)
@@ -154,35 +174,45 @@ class CsvReporter:
                     # Une ligne par split
                     for split in t.splits:
                         cat = self.moteur.get_categorie(split.categorie_id)
-                        writer.writerow([
-                            t.date.strftime("%d/%m/%Y"),
-                            t.libelle,
-                            f"{float(split.montant):.2f}" if t.est_credit else f"{-float(split.montant):.2f}",
-                            "Recette" if t.est_credit else "Dépense",
-                            cat.label if cat else split.categorie_id,
-                            split.projet_id or "",
-                            t.memo,
-                            t.source_fichier,
-                        ])
+                        writer.writerow(
+                            [
+                                t.date.strftime("%d/%m/%Y"),
+                                t.libelle,
+                                f"{float(split.montant):.2f}"
+                                if t.est_credit
+                                else f"{-float(split.montant):.2f}",
+                                "Recette" if t.est_credit else "Dépense",
+                                cat.label if cat else split.categorie_id,
+                                split.projet_id or "",
+                                t.memo,
+                                t.source_fichier,
+                            ]
+                        )
                 elif t.categorie_id:
                     cat = self.moteur.get_categorie(t.categorie_id)
-                    writer.writerow([
-                        t.date.strftime("%d/%m/%Y"),
-                        t.libelle,
-                        f"{float(t.montant):.2f}",
-                        "Recette" if t.est_credit else "Dépense",
-                        cat.label if cat else t.categorie_id,
-                        t.projet_id or "",
-                        t.memo,
-                        t.source_fichier,
-                    ])
+                    writer.writerow(
+                        [
+                            t.date.strftime("%d/%m/%Y"),
+                            t.libelle,
+                            f"{float(t.montant):.2f}",
+                            "Recette" if t.est_credit else "Dépense",
+                            cat.label if cat else t.categorie_id,
+                            t.projet_id or "",
+                            t.memo,
+                            t.source_fichier,
+                        ]
+                    )
                 else:
                     # Non catégorisée
-                    writer.writerow([
-                        t.date.strftime("%d/%m/%Y"),
-                        t.libelle,
-                        f"{float(t.montant):.2f}",
-                        "Recette" if t.est_credit else "Dépense",
-                        "— Non catégorisée —",
-                        "", t.memo, t.source_fichier,
-                    ])
+                    writer.writerow(
+                        [
+                            t.date.strftime("%d/%m/%Y"),
+                            t.libelle,
+                            f"{float(t.montant):.2f}",
+                            "Recette" if t.est_credit else "Dépense",
+                            "— Non catégorisée —",
+                            "",
+                            t.memo,
+                            t.source_fichier,
+                        ]
+                    )

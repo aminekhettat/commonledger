@@ -1,12 +1,12 @@
 """Tests du moteur de catégorisation."""
 
-from decimal import Decimal
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
-from core.categorizer.rules_engine import MoteurCategorisation, _normaliser
-from core.parser.models import Transaction, TransactionSplit
+from core.categorizer.rules_engine import _normaliser
+from core.parser.models import Transaction
 
 
 class TestNormaliser:

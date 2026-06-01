@@ -13,7 +13,6 @@ class TestCompteResultat:
     @pytest.fixture
     def cr(self, moteur, liste_transactions_2024):
         """Compte de résultat de test."""
-        from core.categorizer.rules_engine import MoteurCategorisation
 
         for t in liste_transactions_2024:
             moteur.categoriser_lot([t], seuil_auto=0.1)
