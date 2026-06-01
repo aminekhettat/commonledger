@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor, Cm, Emu
+from docx.shared import Inches, Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION
 from docx.oxml.ns import qn
@@ -32,6 +32,18 @@ from ..accounting.analytique import BilanProjet
 from .graphiques import GraphiquesMaker, MOIS_FR
 
 logger = logging.getLogger(__name__)
+
+
+# ── Dates en français ────────────────────────────────────────────────────────
+
+_MOIS_LONGS = [
+    "", "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+]
+
+def _date_fr(d) -> str:
+    """Formate une date en français : '31 janvier 2024'."""
+    return f"{d.day} {_MOIS_LONGS[d.month]} {d.year}"
 
 
 # ── Helpers couleurs ──────────────────────────────────────────────────────────
@@ -247,100 +259,120 @@ class DocxReporter:
     # ── En-tête ───────────────────────────────────────────────────────────────
 
     def _configurer_entete(self, section, titre_rapport: str) -> None:
-        """Configure l'en-tête actif : logo | titre | numérotation."""
+        """
+        Configure l'en-tête et le pied de page pour les pages courantes (2+).
+
+        En-tête : logo à gauche + nom de l'association au centre
+        Pied de page : numérotation 'Page X sur Y' en bas à gauche
+        """
+        # ── En-tête ───────────────────────────────────────────────────────────
         header = section.header
         header.is_linked_to_previous = False
 
-        # Vider le contenu par défaut
         for para in header.paragraphs:
             para.clear()
 
-        # Tableau à 3 colonnes dans l'en-tête
-        table = header.add_table(rows=1, cols=3, width=Cm(16))
-        table.style = "Table Grid"
-        # Supprimer les bordures du tableau d'en-tête
-        for row in table.rows:
-            for cell in row.cells:
-                tc = cell._tc
-                tcPr = tc.get_or_add_tcPr()
-                tcBorders = OxmlElement("w:tcBorders")
-                for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
-                    border = OxmlElement(f"w:{side}")
-                    border.set(qn("w:val"), "none")
-                    tcBorders.append(border)
-                tcPr.append(tcBorders)
+        # Ligne 1 : logo (gauche) + nom asso (centre)
+        p_h = header.paragraphs[0]
+        p_h.paragraph_format.space_before = Pt(0)
+        p_h.paragraph_format.space_after  = Pt(2)
 
-        col_logo, col_titre, col_page = table.rows[0].cells
-        col_logo.width  = Cm(3)
-        col_titre.width = Cm(10)
-        col_page.width  = Cm(3)
-
-        # Colonne gauche : logo
         logo = self.config.get("logo_chemin", "")
         if logo and Path(logo).exists():
-            p_logo = col_logo.paragraphs[0]
-            p_logo.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            run_logo = p_logo.add_run()
-            run_logo.add_picture(logo, height=Cm(1.2))
-        else:
-            col_logo.paragraphs[0].add_run(
-                self.config.get("sigle", "")
-            ).font.bold = True
+            run_logo = p_h.add_run()
+            run_logo.add_picture(logo, height=Cm(1.1))
+            p_h.add_run("    ")  # espace horizontal
 
-        # Colonne centrale : nom + titre rapport
-        p_titre = col_titre.paragraphs[0]
-        p_titre.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_nom = p_titre.add_run(self.config.get("nom", ""))
+        run_nom = p_h.add_run(self.config.get("nom", ""))
         run_nom.font.bold = True
         run_nom.font.size = Pt(9)
         run_nom.font.color.rgb = _rgb(self.cp)
-        p_titre.add_run(f"\n{titre_rapport}").font.size = Pt(8)
 
-        # Colonne droite : numérotation
-        p_page = col_page.paragraphs[0]
-        p_page.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        _add_page_number_field(p_page)
+        run_sep_h = p_h.add_run(f"  —  {titre_rapport}")
+        run_sep_h.font.size = Pt(8)
+        run_sep_h.font.color.rgb = RGBColor(100, 100, 100)
 
-        # Ligne séparatrice sous l'en-tête
+        # Ligne séparatrice colorée sous l'en-tête
         p_sep = header.add_paragraph()
-        p_sep.paragraph_format.space_before = Pt(3)
+        p_sep.paragraph_format.space_before = Pt(2)
         p_sep.paragraph_format.space_after  = Pt(0)
-        # Bordure inférieure sur le paragraphe séparateur
         pPr = p_sep._p.get_or_add_pPr()
         pBdr = OxmlElement("w:pBdr")
         bottom = OxmlElement("w:bottom")
         bottom.set(qn("w:val"), "single")
-        bottom.set(qn("w:sz"), "6")
+        bottom.set(qn("w:sz"), "8")
         bottom.set(qn("w:space"), "1")
         bottom.set(qn("w:color"), _hex_fill(self.cp))
         pBdr.append(bottom)
         pPr.append(pBdr)
+
+        # ── Pied de page : numérotation bas-gauche ────────────────────────────
+        footer = section.footer
+        footer.is_linked_to_previous = False
+
+        for para in footer.paragraphs:
+            para.clear()
+
+        # Ligne séparatrice au-dessus du pied
+        p_fsep = footer.paragraphs[0]
+        p_fsep.paragraph_format.space_before = Pt(0)
+        p_fsep.paragraph_format.space_after  = Pt(3)
+        pPr2 = p_fsep._p.get_or_add_pPr()
+        pBdr2 = OxmlElement("w:pBdr")
+        top_b = OxmlElement("w:top")
+        top_b.set(qn("w:val"), "single")
+        top_b.set(qn("w:sz"), "4")
+        top_b.set(qn("w:space"), "1")
+        top_b.set(qn("w:color"), _hex_fill(self.cp))
+        pBdr2.append(top_b)
+        pPr2.append(pBdr2)
+
+        # Numérotation bas-gauche
+        p_num = footer.add_paragraph()
+        p_num.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        _add_page_number_field(p_num)
+
+        # Nom asso en bas-droite (même ligne via tabulation)
+        # Utiliser une tabulation droite
+        nom_court = self.config.get("sigle") or self.config.get("nom", "")[:20]
+        run_asso = p_num.add_run(f"\t{nom_court}")
+        run_asso.font.size = Pt(8)
+        run_asso.font.color.rgb = RGBColor(150, 150, 150)
+
+        # Tab stop droite à 15,5 cm
+        from docx.oxml import OxmlElement as oxe
+        pPr_num = p_num._p.get_or_add_pPr()
+        tabs = oxe("w:tabs")
+        tab = oxe("w:tab")
+        tab.set(qn("w:val"), "right")
+        tab.set(qn("w:pos"), "8800")
+        tabs.append(tab)
+        pPr_num.append(tabs)
 
     # ── Page de garde ─────────────────────────────────────────────────────────
 
     def _page_de_garde(self, doc: Document, titre: str, cr: CompteResultat) -> None:
         """Page de garde professionnelle avec bandeau couleur."""
 
-        # Bandeau supérieur coloré (simulé par un tableau pleine largeur)
+        # Bandeau supérieur coloré
         table_top = doc.add_table(rows=1, cols=1)
         table_top.style = "Table Grid"
         cell_top = table_top.rows[0].cells[0]
-        cell_top.width = Cm(21)
         _cell_background(cell_top, self.cp)
 
-        # Logo dans le bandeau
+        # Logo centré dans le bandeau — dans un paragraphe simple (pas de tableau imbriqué)
         p_logo = cell_top.paragraphs[0]
         p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_logo.paragraph_format.space_before = Pt(18)
-        p_logo.paragraph_format.space_after  = Pt(18)
+        p_logo.paragraph_format.space_before = Pt(20)
+        p_logo.paragraph_format.space_after  = Pt(20)
         logo = self.config.get("logo_chemin", "")
         if logo and Path(logo).exists():
             p_logo.add_run().add_picture(logo, height=Cm(3.5))
         else:
-            run_sigles = p_logo.add_run(self.config.get("sigle", "ACM"))
-            run_sigles.font.size = Pt(36)
-            run_sigles.font.bold = True
-            run_sigles.font.color.rgb = RGBColor(255, 255, 255)
+            run_s = p_logo.add_run(self.config.get("sigle", "ACM"))
+            run_s.font.size = Pt(36)
+            run_s.font.bold = True
+            run_s.font.color.rgb = RGBColor(255, 255, 255)
 
         doc.add_paragraph()  # espace
 
@@ -442,7 +474,7 @@ class DocxReporter:
         p_gen = doc.add_paragraph()
         p_gen.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run_gen = p_gen.add_run(
-            f"Document généré le {date.today().strftime('%d/%m/%Y')} par CommonLedger"
+            f"Document généré le {_date_fr(date.today())} — CommonLedger"
         )
         run_gen.font.size = Pt(8)
         run_gen.font.italic = True
@@ -505,8 +537,7 @@ class DocxReporter:
         doc.add_heading("2. Compte de résultat", level=1)
 
         p_periode = doc.add_paragraph(
-            f"Période : {cr.date_debut.strftime('%d %B %Y')} "
-            f"au {cr.date_fin.strftime('%d %B %Y')}"
+            f"Période : {_date_fr(cr.date_debut)} au {_date_fr(cr.date_fin)}"
         )
         p_periode.runs[0].font.italic = True
         p_periode.runs[0].font.size = Pt(10)
@@ -748,7 +779,7 @@ class DocxReporter:
     def _section_signature(self, doc: Document, cr: CompteResultat) -> None:
         doc.add_paragraph()
         p_lieu = doc.add_paragraph(
-            f"Fait à {self.config.get('ville', '…')}, le {date.today().strftime('%d/%m/%Y')}"
+            f"Fait à {self.config.get('ville', '…')}, le {_date_fr(date.today())}"
         )
         p_lieu.runs[0].font.size = Pt(10)
         doc.add_paragraph()
