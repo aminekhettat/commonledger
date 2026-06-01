@@ -214,7 +214,7 @@ class CompteResultat:
 
                 cat = Categorie(id=cat_id, label=f"[{cat_id}]", type=type_cat)
 
-            total = sum(m for m, _ in items)
+            total: Decimal = sum((m for m, _ in items), Decimal(0))
             transactions = [t for _, t in items]
 
             # Dédupliquer les transactions (une transaction splittée peut apparaître plusieurs fois)

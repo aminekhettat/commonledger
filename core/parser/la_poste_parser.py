@@ -597,7 +597,7 @@ class LaPosteParser:
         # Montant = chiffres avec espaces optionnels + virgule + 2 chiffres
         pattern = re.compile(r"\s+(\d{1,3}(?:[\s \xa0]\d{3}){0,3},\d{2})\s*$")
 
-        montants_trouves = []
+        montants_trouves: list[Decimal] = []
         texte_restant = texte
 
         # Extraire jusqu'à 2 montants depuis la droite

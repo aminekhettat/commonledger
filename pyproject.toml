@@ -216,6 +216,12 @@ exclude = [
 module = ["matplotlib.*", "PIL.*", "pdfplumber.*", "fitz.*", "docx.*", "comtypes.*"]
 ignore_missing_imports = true
 
+# python-docx n'a pas de stubs complets — les erreurs attr-defined sont
+# des faux positifs dus à l'absence de stubs, pas des bugs réels
+[[tool.mypy.overrides]]
+module = ["core.reporter.docx_reporter"]
+ignore_errors = true
+
 # ── Bandit (sécurité) ─────────────────────────────────────────────────────────
 [tool.bandit]
 exclude_dirs = ["tests", "ui", "config/assets"]

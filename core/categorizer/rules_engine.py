@@ -175,7 +175,7 @@ class MoteurCategorisation:
 
     def sauvegarder(self) -> None:
         """Sauvegarde les catégories modifiées dans le fichier JSON."""
-        data = {"recettes": [], "depenses": []}
+        data: dict[str, list] = {"recettes": [], "depenses": []}
 
         for cat in self.categories.values():
             cat_dict = {
