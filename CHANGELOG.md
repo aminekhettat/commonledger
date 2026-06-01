@@ -1,7 +1,20 @@
 # CHANGELOG
 
 
+## v0.1.6 (2026-06-01)
+
+### Testing
+
+- 249 tests, 100% coverage (pragma:no cover on unreachable defensive branches)
+  ([`d84e47e`](https://github.com/aminekhettat/commonledger/commit/d84e47eca1be0ec2fd347433bededf1699b06201))
+
+
 ## v0.1.5 (2026-06-01)
+
+### Chores
+
+- **release**: V0.1.5 [skip ci]
+  ([`9b3cbe7`](https://github.com/aminekhettat/commonledger/commit/9b3cbe7e17f64fa8e275f48299b118c0f5d006b5))
 
 ### Documentation
 
