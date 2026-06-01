@@ -79,11 +79,18 @@ def main() -> None:
     app = QApplication(sys.argv)
 
     # Activer le support d'accessibilité UIA sur Windows
-    # (NVDA et JAWS utilisent cette API)
     app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
-    # Style global de l'application
+    # Style global
     app.setStyle("Fusion")
+
+    # Icône de l'application (barre des tâches + Alt+Tab + barre de titre)
+    from PySide6.QtGui import QIcon
+    icon_path = Path("config/assets/icon_commonledger.ico")
+    if not icon_path.exists():
+        icon_path = Path("config/assets/icon_commonledger.png")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     # Lancer la fenêtre principale
     from ui.main_window import MainWindow
