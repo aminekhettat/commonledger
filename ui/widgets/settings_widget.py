@@ -79,6 +79,7 @@ class SettingsWidget(QWidget):
         layout = QVBoxLayout(widget)
 
         champs_def = [
+            ("type_structure", "Type de structure", "Association loi 1901"),
             ("nom", "Nom complet de l'association", ""),
             ("sigle", "Sigle / Acronyme", ""),
             ("adresse", "Adresse", ""),

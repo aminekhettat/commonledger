@@ -1,5 +1,6 @@
 {
   "_commentaire": "TEMPLATE — Copier ce fichier en association.json et remplir vos données. Ne jamais committer association.json sur git.",
+  "type_structure": "Association loi 1901",
   "nom": "Nom complet de votre association",
   "sigle": "SIGLE",
   "adresse": "Adresse du siège social",

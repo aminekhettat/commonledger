@@ -158,6 +158,7 @@ class DocxReporter:
         chemin_sortie: str,
         bilans_projets: Optional[list[BilanProjet]] = None,
         titre_rapport: Optional[str] = None,
+        bilan=None,  # objet Bilan (core.accounting.bilan.Bilan)
     ) -> str:
         cr = compte_resultat
         if not titre_rapport:
@@ -172,6 +173,9 @@ class DocxReporter:
 
         doc = Document()
         self._definir_styles(doc)
+
+        # Stocker le bilan pour utilisation dans les sections
+        self._bilan_data = bilan
 
         # ── Section 1 : Page de garde (première page différente) ──────────────
         section1 = doc.sections[0]
@@ -210,6 +214,11 @@ class DocxReporter:
         doc.add_page_break()
 
         self._section_detail(doc, cr)
+
+        # Bilan si les données sont disponibles (passé via kwargs)
+        if hasattr(self, "_bilan_data") and self._bilan_data:
+            doc.add_page_break()
+            self._section_bilan(doc, self._bilan_data)
 
         if bilans_projets:
             doc.add_page_break()
@@ -376,7 +385,17 @@ class DocxReporter:
 
         doc.add_paragraph()  # espace
 
-        # Nom de l'association
+        # Type de structure + Nom de l'association
+        type_struct = self.config.get("type_structure", "")
+        if type_struct:
+            p_type = doc.add_paragraph()
+            p_type.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run_type = p_type.add_run(type_struct.upper())
+            run_type.font.size = Pt(10)
+            run_type.font.color.rgb = RGBColor(200, 160, 50)
+            run_type.font.bold = True
+            run_type.font.color.rgb = _rgb(self.cs)
+
         p_nom = doc.add_paragraph()
         p_nom.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run_nom = p_nom.add_run(self.config.get("nom", ""))
@@ -505,6 +524,7 @@ class DocxReporter:
         doc.add_heading("1. Informations de l'association", level=1)
 
         champs = [
+            ("Type de structure", "type_structure"),
             ("Nom complet", "nom"), ("Sigle", "sigle"),
             ("Adresse", "adresse"), ("Code postal", "code_postal"),
             ("Ville", "ville"), ("Email", "email"),
@@ -730,6 +750,110 @@ class DocxReporter:
                 ).font.size = Pt(9)
                 row.cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
             doc.add_paragraph()
+
+    # ── Section Bilan ─────────────────────────────────────────────────────────
+
+    def _section_bilan(self, doc: Document, bilan) -> None:
+        """
+        Tableau du bilan comptable simplifié.
+
+        Conforme aux exigences du Plan Comptable des Associations (ANC 2018-06)
+        pour la comptabilité simplifiée (structures de moins de 3 M€ de produits).
+        """
+        from decimal import Decimal
+
+        doc.add_heading("6. Bilan comptable simplifié", level=1)
+
+        type_struct = self.config.get("type_structure", "Association loi 1901")
+        p_info = doc.add_paragraph(
+            f"{type_struct} — Bilan au {_date_fr(bilan.date_cloture)}"
+        )
+        p_info.runs[0].font.italic = True
+        p_info.runs[0].font.size = Pt(10)
+        doc.add_paragraph()
+
+        # Tableau à deux colonnes : Actif | Passif
+        table = doc.add_table(rows=1, cols=4)
+        table.style = "Table Grid"
+
+        # En-têtes
+        hdrs = ["ACTIF", "Montant (€)", "PASSIF", "Montant (€)"]
+        for i, h in enumerate(hdrs):
+            cell = table.rows[0].cells[i]
+            _cell_background(cell, self.cp)
+            run = cell.paragraphs[0].add_run(h)
+            run.font.bold = True
+            run.font.color.rgb = RGBColor(255, 255, 255)
+            run.font.size = Pt(10)
+            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        lignes_actif  = bilan.lignes_actif()
+        lignes_passif = bilan.lignes_passif()
+        nb_rows = max(len(lignes_actif), len(lignes_passif))
+
+        def _fmt(d) -> str:
+            return f"{float(d):,.2f} €" if d is not None else ""
+
+        for idx in range(nb_rows):
+            row = table.add_row()
+
+            # Fond alterné
+            if idx % 2 == 0:
+                for c in row.cells:
+                    _cell_background(c, self.cs)
+
+            # Colonne actif
+            if idx < len(lignes_actif):
+                la = lignes_actif[idx]
+                run_a = row.cells[0].paragraphs[0].add_run(la.label)
+                run_a.font.size = Pt(10)
+                run_a.font.bold = la.gras
+                if la.gras:
+                    _cell_background(row.cells[0], "#d4e6f1")
+                    _cell_background(row.cells[1], "#d4e6f1")
+                run_av = row.cells[1].paragraphs[0].add_run(_fmt(la.montant))
+                run_av.font.size = Pt(10)
+                run_av.font.bold = la.gras
+                row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+            # Colonne passif
+            if idx < len(lignes_passif):
+                lp = lignes_passif[idx]
+                run_p = row.cells[2].paragraphs[0].add_run(lp.label)
+                run_p.font.size = Pt(10)
+                run_p.font.bold = lp.gras
+                if lp.gras:
+                    _cell_background(row.cells[2], "#d4e6f1")
+                    _cell_background(row.cells[3], "#d4e6f1")
+                run_pv = row.cells[3].paragraphs[0].add_run(_fmt(lp.montant))
+                run_pv.font.size = Pt(10)
+                run_pv.font.bold = lp.gras
+                row.cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        # Vérification d'équilibre
+        doc.add_paragraph()
+        if bilan.est_equilibre:
+            p_eq = doc.add_paragraph("✓ Bilan équilibré — Total Actif = Total Passif")
+            p_eq.runs[0].font.color.rgb = RGBColor(0, 128, 0)
+            p_eq.runs[0].font.size = Pt(9)
+        else:
+            p_eq = doc.add_paragraph(
+                f"⚠ Écart de {float(bilan.ecart_equilibre):+.2f} € — "
+                f"vérifiez les données saisies."
+            )
+            p_eq.runs[0].font.color.rgb = RGBColor(180, 0, 0)
+            p_eq.runs[0].font.size = Pt(9)
+
+        doc.add_paragraph()
+        p_note = doc.add_paragraph(
+            "Note : Bilan établi conformément au Plan Comptable des Associations "
+            f"(règlement ANC 2018-06), comptabilité simplifiée. "
+            f"Dotation aux amortissements de l'exercice : "
+            f"{float(bilan.immobilisations_nettes) if hasattr(bilan,'immobilisations_nettes') else 0:.2f} €."
+        )
+        p_note.runs[0].font.size = Pt(8)
+        p_note.runs[0].font.italic = True
+        p_note.runs[0].font.color.rgb = RGBColor(100, 100, 100)
 
     # ── Section 6 : Analytique ────────────────────────────────────────────────
 
