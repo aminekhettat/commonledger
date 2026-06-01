@@ -1,0 +1,188 @@
+"""
+Modèles de données pour le module parser.
+
+Ce module définit les structures de données partagées entre le parseur,
+le moteur de catégorisation et les modules comptables.
+"""
+
+from __future__ import annotations
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+from typing import Optional
+
+
+class ParseError(Exception):
+    """Levée quand un fichier PDF ne peut pas être parsé correctement."""
+    pass
+
+
+@dataclass
+class Transaction:
+    """
+    Représente une transaction bancaire extraite d'un relevé.
+
+    Attributes:
+        date:            Date de la transaction.
+        libelle:         Libellé brut tel qu'il apparaît sur le relevé.
+        montant:         Montant en euros. Positif = crédit, négatif = débit.
+        solde_apres:     Solde du compte après cette transaction (si disponible).
+        source_fichier:  Nom du fichier PDF d'origine.
+        id_unique:       Identifiant unique généré pour éviter les doublons.
+        categorie_id:    Identifiant de la catégorie assignée (None = non catégorisé).
+        projet_id:       Identifiant du projet analytique associé (None = aucun).
+        memo:            Note libre saisie par l'utilisateur.
+        splits:          Liste de sous-ventilations si la transaction est éclatée.
+        details:         Informations complémentaires (ex. nom du prestataire).
+        verrouille:      True si la catégorisation a été validée manuellement.
+    """
+    date: date
+    libelle: str
+    montant: Decimal
+    solde_apres: Optional[Decimal] = None
+    source_fichier: str = ""
+    id_unique: str = ""
+    categorie_id: Optional[str] = None
+    projet_id: Optional[str] = None
+    memo: str = ""
+    splits: list[TransactionSplit] = field(default_factory=list)
+    details: dict = field(default_factory=dict)
+    verrouille: bool = False
+
+    def __post_init__(self):
+        """
+        Génère l'id_unique si absent.
+
+        Utilise un hash du libellé complet pour distinguer deux transactions
+        ayant la même date et le même montant mais des libellés différents
+        (ex : deux prélèvements PayPal le même jour avec des REF distincts).
+        """
+        if not self.id_unique:
+            # hash() garantit l'unicité même si seule la fin du libellé diffère
+            h = abs(hash(self.libelle))
+            self.id_unique = f"{self.date.isoformat()}_{self.montant}_{h}"
+
+    @property
+    def est_credit(self) -> bool:
+        """Retourne True si la transaction est un crédit (recette)."""
+        return self.montant > 0
+
+    @property
+    def est_debit(self) -> bool:
+        """Retourne True si la transaction est un débit (dépense)."""
+        return self.montant < 0
+
+    @property
+    def est_splittee(self) -> bool:
+        """Retourne True si la transaction a été éclatée en sous-catégories."""
+        return len(self.splits) > 0
+
+    @property
+    def est_categorisee(self) -> bool:
+        """Retourne True si la transaction a une catégorie ou des splits."""
+        return self.categorie_id is not None or self.est_splittee
+
+    def to_dict(self) -> dict:
+        """Sérialise la transaction en dictionnaire pour la persistance JSON."""
+        return {
+            "date": self.date.isoformat(),
+            "libelle": self.libelle,
+            "montant": str(self.montant),
+            "solde_apres": str(self.solde_apres) if self.solde_apres else None,
+            "source_fichier": self.source_fichier,
+            "id_unique": self.id_unique,
+            "categorie_id": self.categorie_id,
+            "projet_id": self.projet_id,
+            "memo": self.memo,
+            "splits": [s.to_dict() for s in self.splits],
+            "details": self.details,
+            "verrouille": self.verrouille,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Transaction:
+        """Recrée une Transaction depuis un dictionnaire JSON."""
+        from datetime import date as date_type
+        t = cls(
+            date=date_type.fromisoformat(d["date"]),
+            libelle=d["libelle"],
+            montant=Decimal(d["montant"]),
+            solde_apres=Decimal(d["solde_apres"]) if d.get("solde_apres") else None,
+            source_fichier=d.get("source_fichier", ""),
+            id_unique=d.get("id_unique", ""),
+            categorie_id=d.get("categorie_id"),
+            projet_id=d.get("projet_id"),
+            memo=d.get("memo", ""),
+            splits=[TransactionSplit.from_dict(s) for s in d.get("splits", [])],
+            details=d.get("details", {}),
+            verrouille=d.get("verrouille", False),
+        )
+        return t
+
+
+@dataclass
+class TransactionSplit:
+    """
+    Sous-ventilation d'une transaction éclatée.
+
+    Exemple : un virement HelloAsso de 350€ peut être éclaté en
+    - 280€ → cotisations
+    - 70€  → dons
+
+    Attributes:
+        montant:      Montant de cette part (toujours positif, le signe
+                      vient de la transaction parente).
+        categorie_id: Catégorie affectée à cette part.
+        projet_id:    Projet analytique optionnel.
+        memo:         Note libre sur cette part.
+        details:      Informations complémentaires (ex. nom prestataire).
+    """
+    montant: Decimal
+    categorie_id: str
+    projet_id: Optional[str] = None
+    memo: str = ""
+    details: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "montant": str(self.montant),
+            "categorie_id": self.categorie_id,
+            "projet_id": self.projet_id,
+            "memo": self.memo,
+            "details": self.details,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> TransactionSplit:
+        return cls(
+            montant=Decimal(d["montant"]),
+            categorie_id=d["categorie_id"],
+            projet_id=d.get("projet_id"),
+            memo=d.get("memo", ""),
+            details=d.get("details", {}),
+        )
+
+
+@dataclass
+class ReleveInfo:
+    """
+    Métadonnées extraites d'un relevé bancaire.
+
+    Attributes:
+        fichier:         Chemin vers le fichier PDF source.
+        periode_debut:   Premier jour de la période couverte.
+        periode_fin:     Dernier jour de la période couverte.
+        solde_debut:     Solde en début de période.
+        solde_fin:       Solde en fin de période.
+        numero_compte:   Numéro de compte bancaire.
+        transactions:    Liste des transactions extraites.
+        valide:          True si le fichier a passé la vérification d'appartenance.
+    """
+    fichier: str
+    periode_debut: Optional[date] = None
+    periode_fin: Optional[date] = None
+    solde_debut: Optional[Decimal] = None
+    solde_fin: Optional[Decimal] = None
+    numero_compte: str = ""
+    transactions: list[Transaction] = field(default_factory=list)
+    valide: bool = False

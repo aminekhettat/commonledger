@@ -1,0 +1,219 @@
+"""
+Exercice comptable — Conteneur principal de l'année comptable.
+
+Un Exercice regroupe :
+- Les transactions importées pour l'année
+- Les relevés source (pour les vérifications de cohérence)
+- Le budget prévisionnel
+- Les projets analytiques
+
+Il assure également la persistance des données dans le répertoire
+data/exercices/<annee>/.
+"""
+
+from __future__ import annotations
+import json
+import logging
+import shutil
+from datetime import date
+from decimal import Decimal
+from pathlib import Path
+from typing import Optional
+
+from ..parser.models import Transaction, ReleveInfo
+from ..categorizer.rules_engine import MoteurCategorisation
+from .compte_resultat import CompteResultat
+from .analytique import ComptaAnalytique
+
+logger = logging.getLogger(__name__)
+
+
+class Exercice:
+    """
+    Représente un exercice comptable complet.
+
+    Gère l'import, la persistance et le calcul pour une année fiscale.
+
+    Attributes:
+        annee:           Année de l'exercice.
+        repertoire:      Répertoire de stockage (data/exercices/YYYY/).
+        transactions:    Toutes les transactions importées.
+        releves:         Métadonnées des relevés importés.
+        solde_initial:   Solde bancaire au 1er janvier.
+        budget:          Budget prévisionnel par catégorie.
+    """
+
+    def __init__(self, annee: int, repertoire_data: str):
+        """
+        Initialise l'exercice et charge les données persistées si elles existent.
+
+        Args:
+            annee:           Année de l'exercice (ex: 2024).
+            repertoire_data: Répertoire racine des données (ex: "data").
+        """
+        self.annee = annee
+        self.repertoire = Path(repertoire_data) / "exercices" / str(annee)
+        self.repertoire.mkdir(parents=True, exist_ok=True)
+
+        self.transactions: list[Transaction] = []
+        self.releves: list[dict] = []
+        self.solde_initial: Decimal = Decimal("0")
+        self.budget: dict[str, Decimal] = {}
+
+        self._charger()
+
+    @property
+    def date_debut(self) -> date:
+        return date(self.annee, 1, 1)
+
+    @property
+    def date_fin(self) -> date:
+        return date(self.annee, 12, 31)
+
+    def _charger(self) -> None:
+        """Charge les transactions et métadonnées persistées."""
+        fichier_tx = self.repertoire / "transactions.json"
+        if fichier_tx.exists():
+            with open(fichier_tx, encoding="utf-8") as f:
+                data = json.load(f)
+            self.transactions = [Transaction.from_dict(d) for d in data.get("transactions", [])]
+            self.solde_initial = Decimal(data.get("solde_initial", "0"))
+            self.releves = data.get("releves", [])
+            self.budget = {k: Decimal(v) for k, v in data.get("budget", {}).items()}
+            logger.info(f"Exercice {self.annee} : {len(self.transactions)} transactions chargées.")
+
+    def sauvegarder(self) -> None:
+        """Persiste toutes les données de l'exercice."""
+        fichier_tx = self.repertoire / "transactions.json"
+        data = {
+            "annee": self.annee,
+            "solde_initial": str(self.solde_initial),
+            "releves": self.releves,
+            "budget": {k: str(v) for k, v in self.budget.items()},
+            "transactions": [t.to_dict() for t in self.transactions],
+        }
+        with open(fichier_tx, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        logger.info(f"Exercice {self.annee} sauvegardé : {len(self.transactions)} transactions.")
+
+    def importer_releve(self, releve: ReleveInfo, copier_pdf: bool = True) -> int:
+        """
+        Intègre les transactions d'un relevé dans l'exercice.
+
+        Déduplique les transactions déjà présentes (même id_unique).
+
+        Args:
+            releve:      ReleveInfo issu du parseur.
+            copier_pdf:  Si True, copie le PDF dans releves_importes/.
+
+        Returns:
+            Nombre de nouvelles transactions ajoutées.
+        """
+        ids_existants = {t.id_unique for t in self.transactions}
+        nouvelles = [
+            t for t in releve.transactions
+            if t.id_unique not in ids_existants
+        ]
+
+        self.transactions.extend(nouvelles)
+        self.transactions.sort(key=lambda t: t.date)
+
+        # Enregistrer la métadonnée du relevé
+        meta = {
+            "fichier": Path(releve.fichier).name,
+            "periode_debut": releve.periode_debut.isoformat() if releve.periode_debut else None,
+            "periode_fin": releve.periode_fin.isoformat() if releve.periode_fin else None,
+            "solde_debut": str(releve.solde_debut) if releve.solde_debut else None,
+            "solde_fin": str(releve.solde_fin) if releve.solde_fin else None,
+            "nb_transactions": len(releve.transactions),
+        }
+        # Éviter les doublons de relevés
+        noms_existants = {r["fichier"] for r in self.releves}
+        if meta["fichier"] not in noms_existants:
+            self.releves.append(meta)
+
+        # Copier le PDF source
+        if copier_pdf and releve.fichier:
+            dossier_releves = self.repertoire / "releves_importes"
+            dossier_releves.mkdir(exist_ok=True)
+            dest = dossier_releves / Path(releve.fichier).name
+            if not dest.exists():
+                shutil.copy2(releve.fichier, dest)
+
+        return len(nouvelles)
+
+    def calculer_compte_resultat(
+        self,
+        moteur: MoteurCategorisation,
+        date_debut: Optional[date] = None,
+        date_fin: Optional[date] = None,
+        projet_id: Optional[str] = None,
+    ) -> CompteResultat:
+        """
+        Calcule le compte de résultat pour tout ou partie de l'exercice.
+
+        Args:
+            moteur:      Moteur de catégorisation.
+            date_debut:  Début de la période (1er janvier par défaut).
+            date_fin:    Fin de la période (31 décembre par défaut).
+            projet_id:   Si fourni, filtre par projet analytique.
+
+        Returns:
+            CompteResultat calculé.
+        """
+        return CompteResultat(
+            moteur=moteur,
+            transactions=self.transactions,
+            date_debut=date_debut or self.date_debut,
+            date_fin=date_fin or self.date_fin,
+            projet_id=projet_id,
+            solde_initial=self.solde_initial,
+        )
+
+    def transactions_non_categorisees(self) -> list[Transaction]:
+        """Retourne les transactions sans catégorie ni splits."""
+        return [t for t in self.transactions if not t.est_categorisee]
+
+    def transactions_periode(self, debut: date, fin: date) -> list[Transaction]:
+        """Retourne les transactions dans une période donnée."""
+        return [t for t in self.transactions if debut <= t.date <= fin]
+
+    def definir_budget(self, cat_id: str, montant: Decimal) -> None:
+        """
+        Définit le budget prévisionnel pour une catégorie.
+
+        Args:
+            cat_id:  Identifiant de la catégorie.
+            montant: Montant budgété (toujours positif).
+        """
+        self.budget[cat_id] = abs(montant)
+
+    def ecart_budget(self, cat_id: str, montant_reel: Decimal) -> Optional[Decimal]:
+        """
+        Calcule l'écart entre le réalisé et le budgété.
+
+        Args:
+            cat_id:        Identifiant de la catégorie.
+            montant_reel:  Montant réalisé.
+
+        Returns:
+            Écart (réel - budget), ou None si aucun budget défini.
+        """
+        if cat_id not in self.budget:
+            return None
+        return montant_reel - self.budget[cat_id]
+
+    def resume(self) -> dict:
+        """Retourne un résumé rapide de l'état de l'exercice."""
+        non_cat = len(self.transactions_non_categorisees())
+        return {
+            "annee": self.annee,
+            "nb_transactions": len(self.transactions),
+            "nb_non_categorisees": non_cat,
+            "nb_releves_importes": len(self.releves),
+            "solde_initial": self.solde_initial,
+            "taux_categorisation": (
+                round((1 - non_cat / len(self.transactions)) * 100, 1)
+                if self.transactions else 0.0
+            ),
+        }

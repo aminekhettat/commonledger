@@ -1,0 +1,153 @@
+{
+  "_commentaire": "Catalogue des catégories comptables — Culture Musique ACM. Cohérent avec les exercices Excel 2023/2024 et Word 2025.",
+  "_version": "1.1",
+  "recettes": [
+    {
+      "id": "cotisations",
+      "label": "Cotisations membres",
+      "description": "Cotisations annuelles des adhérents (HelloAsso, chèque, espèces)",
+      "mots_cles": ["COTIS", "ADHESION", "HELLOASSO", "STRIPE HELLOASSO", "VIREMENT DE STRIPE"],
+      "split_autorise": true,
+      "couleur_graphique": "#2196F3"
+    },
+    {
+      "id": "dons",
+      "label": "Dons",
+      "description": "Dons manuels ou via HelloAsso / Stripe",
+      "mots_cles": ["DON", "LIBERALITE", "HELLOASSO", "STRIPE HELLOASSO"],
+      "split_autorise": true,
+      "couleur_graphique": "#4CAF50"
+    },
+    {
+      "id": "billetterie",
+      "label": "Billetterie concerts",
+      "description": "Ventes de billets (Weezevent, espèces, TPE)",
+      "mots_cles": ["WEEZEVENT", "BILLET", "ENTREE", "CONCERT", "SPECTACLE", "VERSEMENT CARTE", "VERSEMENT DAB", "REMISE DE CHEQUES", "THEATRE DU GYMNASE", "GYMNASE BELL", "GYMNASE MARIE", "INSTITUT DU MONDE ARABE", "IMA ", "RECETTE SABA", "SABA ORCHESTRA"],
+      "split_autorise": false,
+      "couleur_graphique": "#9C27B0"
+    },
+    {
+      "id": "subventions",
+      "label": "Subventions",
+      "description": "Subventions publiques (mairie, département, région, DRAC)",
+      "mots_cles": ["SUBV", "MAIRIE", "DRAC", "REGION", "DEPARTEMENT", "COMMUNE", "CAF", "FONPEPS"],
+      "split_autorise": false,
+      "couleur_graphique": "#FF9800"
+    },
+    {
+      "id": "boutique",
+      "label": "Boutique & merchandising",
+      "description": "Ventes boutique (PayPal WooPayments, espèces)",
+      "mots_cles": ["WOOCOMMERCE", "WOOPAYMENTS", "BOUTIQUE", "SHOP", "MERCH"],
+      "split_autorise": false,
+      "couleur_graphique": "#00BCD4"
+    },
+    {
+      "id": "autres_recettes",
+      "label": "Autres recettes",
+      "description": "Recettes diverses non classifiées",
+      "mots_cles": [],
+      "split_autorise": true,
+      "couleur_graphique": "#9E9E9E"
+    }
+  ],
+  "depenses": [
+    {
+      "id": "locations",
+      "label": "Locations & répétitions",
+      "description": "Location salle de répétition et loyers (Cité Internationale des Arts, Mairie de Paris…)",
+      "mots_cles": ["LOYER", "LOCATION", "REGIE DE LA MAIRIE", "CITE INTERNATIONALE", "REPET", "SALLE"],
+      "details_requis": false,
+      "couleur_graphique": "#E91E63"
+    },
+    {
+      "id": "evenements",
+      "label": "Événements & concerts",
+      "description": "Dépenses liées à l'organisation de concerts (sono, techniciens, transport…)",
+      "mots_cles": ["SONO", "CONCERT", "FESTIVAL", "SCENE", "BACKLINE", "SNCF", "TRAIN", "BILLET DE TRAIN", "REVERB TECHNIC", "STREET DISPATCH", "THEATRE DU GYMNAS", "PRESTATION DU", "SABA O"],
+      "details_requis": false,
+      "couleur_graphique": "#FF5722"
+    },
+    {
+      "id": "communication",
+      "label": "Communication & promotion",
+      "description": "Publicités Facebook/Meta, impression flyers, Meta Verified, Vista Print",
+      "mots_cles": ["FACEBOOK", "META", "INSTAGRAM", "VISTAPRINT", "VISTA PRINT", "FLYER", "AFFICHE", "META VERIFIED", "GOOGLE IRELAND", "ADWORDS", "GOOGLE ADS"],
+      "details_requis": false,
+      "couleur_graphique": "#3F51B5"
+    },
+    {
+      "id": "site_web",
+      "label": "Site web & hébergement",
+      "description": "Hébergement (LWS, Hostinger), noms de domaine, maintenance",
+      "mots_cles": ["LWS", "HOSTINGER", "OVH", "GANDI", "INFOMANIAK", "IONOS", "HEBERGEMENT", "DOMAINE", "SABAMUSIC"],
+      "details_requis": false,
+      "couleur_graphique": "#009688"
+    },
+    {
+      "id": "production_album",
+      "label": "Production musicale",
+      "description": "Pressage album, enregistrement, studio (AktifCD, prestataires musicaux)",
+      "mots_cles": ["AKTIFCD", "AKTIF", "PRESSAGE", "STUDIO", "ENREGISTREMENT", "MASTERING"],
+      "details_requis": false,
+      "couleur_graphique": "#795548"
+    },
+    {
+      "id": "boutique_depenses",
+      "label": "Boutique & expédition",
+      "description": "Achats produits boutique, emballages, frais d'expédition (Colissimo, Mondial Relay)",
+      "mots_cles": ["COLISSIMO", "MONDIAL RELAY", "EXPEDITION", "EMBALLAGE", "ZETTLE", "TERMINAL"],
+      "details_requis": false,
+      "couleur_graphique": "#CDDC39"
+    },
+    {
+      "id": "assurance",
+      "label": "Assurance",
+      "description": "Assurance responsabilité civile et événementielle (SMACL, MAIF…)",
+      "mots_cles": ["SMACL", "ASSUR", "MAIF", "MACIF", "AXA", "GROUPAMA", "MMA"],
+      "details_requis": false,
+      "couleur_graphique": "#607D8B"
+    },
+    {
+      "id": "frais_bancaires",
+      "label": "Frais bancaires & Adispo",
+      "description": "Frais La Banque Postale + cotisation Adispo (38,04 €/mois)",
+      "mots_cles": ["COTISATION ADISPO", "ADISPO", "FRAIS BANCAIRES", "AGIOS", "COMMISSION BANCAIRE", "FRAIS SUIVI DOSSIER", "FRAIS SUIVI"],
+      "details_requis": false,
+      "couleur_graphique": "#9E9E9E"
+    },
+    {
+      "id": "fonctionnement",
+      "label": "Frais de fonctionnement",
+      "description": "Achats divers pour le fonctionnement courant (fournitures, repas association, etc.)",
+      "mots_cles": ["ACHAT CB", "AMAZON", "FNAC", "CULTURA", "REPAS", "FOURNITURES"],
+      "details_requis": false,
+      "couleur_graphique": "#FF9800"
+    },
+    {
+      "id": "prestataire_externe",
+      "label": "Prestataire externe",
+      "description": "Paiement à un prestataire externe (photographe, graphiste, technicien…)",
+      "mots_cles": [],
+      "details_requis": true,
+      "champs_details": ["nom_prestataire", "fonction"],
+      "couleur_graphique": "#F44336"
+    },
+    {
+      "id": "courrier",
+      "label": "Envoi courrier & La Poste",
+      "description": "Affranchissement, recommandés, envois postaux",
+      "mots_cles": ["LA POSTE", "TIMBRE", "RECOMMANDE", "AFFRANCHISSEMENT", "COLISSIMO ADMIN"],
+      "details_requis": false,
+      "couleur_graphique": "#8BC34A"
+    },
+    {
+      "id": "autres_depenses",
+      "label": "Autres dépenses",
+      "description": "Dépenses diverses non classifiées (remboursements, prêts internes, PayPal non ventilé)",
+      "mots_cles": ["REMBOURSEMENT PRET", "REMBOURSEMENT PARTIEL", "PAYPAL"],
+      "details_requis": false,
+      "couleur_graphique": "#757575"
+    }
+  ]
+}

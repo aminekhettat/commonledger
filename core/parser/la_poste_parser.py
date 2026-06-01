@@ -1,0 +1,568 @@
+"""
+Parseur pour les relevés de compte La Banque Postale (CCP).
+
+Ce module gère l'extraction des transactions depuis les fichiers PDF
+de relevés La Banque Postale au format CCP (Compte Chèque Postal).
+
+Format observé sur les relevés 2024 (et similaire depuis ~2019) :
+  - En-tête : numéro CCP, IBAN, BIC, "Nouveau solde au JJ/MM/AAAA"
+  - Corps : tableau avec colonnes Date | Opération | Débit(€) | Crédit(€)
+  - Dates au format DD/MM (sans année — l'année est déduite du nom de fichier)
+  - "Ancien solde au JJ/MM/AAAA  X XXX,XX" → solde d'ouverture
+  - "Nouveau solde au JJ/MM/AAAA  X XXX,XX" → solde de clôture
+  - Nom fichier : releve_6804150W020_YYYY-MM-DD.pdf
+
+Exemple de ligne de transaction extraite du texte brut ::
+
+    03/01 PRELEVEMENT DE PayPal Europe S.a.r.   16,00
+    l. et Cie S.C.A REF : 103158...
+
+Utilisation typique::
+
+    parser = LaPosteParser(config_asso)
+    releve  = parser.parser_fichier("releve_6804150W020_2024-01-31.pdf")
+    for t in releve.transactions:
+        print(t.date, t.libelle, t.montant)
+"""
+
+import re
+import logging
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Optional
+
+import pdfplumber
+
+from .models import Transaction, ReleveInfo, ParseError
+
+logger = logging.getLogger(__name__)
+
+
+# ── Expressions régulières ────────────────────────────────────────────────────
+
+# Date DD/MM en début de ligne de transaction (pas d'année sur le relevé)
+_RE_DATE_TX = re.compile(r"^(\d{2})/(\d{2})$")
+
+# Date complète DD/MM/YYYY pour les soldes
+_RE_DATE_COMPLETE = re.compile(r"(\d{2})/(\d{2})/(\d{4})")
+
+# Montant français : "1 234,56" ou "1234,56" (espaces insécables possibles)
+_RE_MONTANT = re.compile(r"^\+?\s*\d[\d\s ]*,\d{2}$")
+
+# Ancien solde au JJ/MM/AAAA  XXXX,XX
+_RE_ANCIEN_SOLDE = re.compile(
+    r"ancien\s+solde\s+au\s+\d{2}/\d{2}/\d{4}\s+([\d\s ]+,\d{2})",
+    re.IGNORECASE,
+)
+# Nouveau solde au JJ/MM/AAAA  +XXXX,XX ou  XXXX,XX
+_RE_NOUVEAU_SOLDE = re.compile(
+    r"nouveau\s+solde\s+au\s+\d{2}/\d{2}/\d{4}\s+\+?\s*([\d\s ]+,\d{2})",
+    re.IGNORECASE,
+)
+# Période : "Arrêté mensuel du JJ/MM/AAAA au JJ/MM/AAAA"
+_RE_PERIODE = re.compile(
+    r"arr[eê]t[eé]\s+(?:mensuel\s+)?du\s+(\d{2}/\d{2}/\d{4})\s+(?:au|à)\s+(\d{2}/\d{2}/\d{4})",
+    re.IGNORECASE,
+)
+# Numéro de compte dans le texte
+_RE_NUMERO_COMPTE = re.compile(r"(\d{7}[A-Z]\d{3})")
+
+
+def _parse_montant(texte: str) -> Optional[Decimal]:
+    """
+    Convertit une chaîne montant français en Decimal.
+
+    Gère les espaces insécables (\\u00a0), les espaces normaux
+    et la virgule décimale.
+
+    Args:
+        texte: Chaîne brute du montant (ex: "1 234,56", "16,00").
+
+    Returns:
+        Decimal ou None si conversion impossible.
+    """
+    if not texte:
+        return None
+    # Supprimer €, espaces (normaux et insécables), signe +
+    nettoyé = texte.replace("€", "").replace(" ", "").replace(" ", "").replace("+", "").strip()
+    nettoyé = nettoyé.replace(",", ".")
+    try:
+        return Decimal(nettoyé)
+    except InvalidOperation:
+        return None
+
+
+def _parse_date_complete(texte: str) -> Optional[date]:
+    """Parse une date DD/MM/YYYY."""
+    m = _RE_DATE_COMPLETE.search(texte)
+    if m:
+        try:
+            return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            pass
+    return None
+
+
+class LaPosteParser:
+    """
+    Parseur de relevés La Banque Postale au format PDF (CCP).
+
+    Vérifie l'appartenance du fichier à l'association grâce au
+    numéro de compte CCP ou à l'IBAN, puis extrait les transactions.
+
+    Attributes:
+        iban:            IBAN de l'association (sans espaces, majuscules).
+        bic:             BIC de l'association.
+        numero_compte:   Numéro CCP court (ex: "6804150W020").
+        nom_association: Nom de l'association pour validation.
+    """
+
+    def __init__(self, config_association: dict):
+        """
+        Initialise le parseur avec la configuration de l'association.
+
+        Args:
+            config_association: Dictionnaire chargé depuis association.json.
+        """
+        self.iban = config_association.get("iban", "").replace(" ", "").upper()
+        self.bic = config_association.get("bic", "").upper()
+        self.numero_compte = config_association.get("numero_compte", "")
+        self.nom_association = config_association.get("nom", "")
+        # Extraire le numéro court depuis l'IBAN si non fourni explicitement
+        if not self.numero_compte and len(self.iban) >= 25:
+            self.numero_compte = self._extraire_numero_compte(self.iban)
+
+    def _extraire_numero_compte(self, iban: str) -> str:
+        """
+        Extrait le numéro CCP lisible depuis l'IBAN La Banque Postale.
+
+        Format IBAN LBP : FR94 2004 1000 0168 0415 0W02 084
+        Le numéro CCP (11 chars) commence à la position 14 de l'IBAN sans espaces.
+        """
+        iban_clean = iban.replace(" ", "")
+        if len(iban_clean) >= 25 and iban_clean.startswith("FR"):
+            candidat = iban_clean[14:25]
+            # Doit ressembler à 7 chiffres + 1 lettre + 3 chiffres
+            if re.match(r"\d{7}[A-Z]\d{3}", candidat):
+                return candidat
+        return ""
+
+    def verifier_appartenance(self, chemin_pdf: str) -> bool:
+        """
+        Vérifie que le PDF appartient bien à l'association.
+
+        Contrôle la présence du numéro de compte ou de l'IBAN
+        dans les premières pages du document.
+
+        Args:
+            chemin_pdf: Chemin vers le fichier PDF.
+
+        Returns:
+            True si le fichier est reconnu.
+        """
+        try:
+            with pdfplumber.open(chemin_pdf) as pdf:
+                # Vérifier sur les 2 premières pages max
+                for page in pdf.pages[:2]:
+                    texte = (page.extract_text() or "").upper().replace(" ", "").replace(" ", "")
+                    # Chercher le numéro de compte (ex: 6804150W020)
+                    if self.numero_compte and self.numero_compte.upper() in texte:
+                        return True
+                    # Chercher l'IBAN (sans espaces)
+                    if self.iban and self.iban in texte:
+                        return True
+                    # Chercher le nom de l'association (premiers 20 chars)
+                    if self.nom_association:
+                        nom_court = self.nom_association.upper().replace(" ", "")[:15]
+                        if nom_court and nom_court in texte:
+                            return True
+            # Si aucun marqueur configuré, accepter par défaut
+            return not self.numero_compte and not self.iban
+        except Exception as e:
+            logger.warning(f"Impossible de vérifier {chemin_pdf}: {e}")
+            return False
+
+    def parser_fichier(self, chemin_pdf: str) -> ReleveInfo:
+        """
+        Parse un fichier PDF de relevé et extrait toutes les transactions.
+
+        Args:
+            chemin_pdf: Chemin absolu vers le fichier PDF.
+
+        Returns:
+            ReleveInfo avec les transactions et métadonnées extraites.
+
+        Raises:
+            FileNotFoundError: Si le fichier n'existe pas.
+            ParseError: Si le fichier est illisible.
+        """
+        chemin = Path(chemin_pdf)
+        if not chemin.exists():
+            raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
+
+        releve = ReleveInfo(fichier=str(chemin))
+        releve.valide = self.verifier_appartenance(chemin_pdf)
+
+        if not releve.valide:
+            logger.warning(f"Fichier non reconnu comme relevé de l'association : {chemin.name}")
+
+        # Déduire l'année depuis le nom de fichier (ex: releve_6804150W020_2024-01-31.pdf)
+        annee_fichier = self._annee_depuis_nom(chemin.name)
+        mois_fichier = self._mois_depuis_nom(chemin.name)
+
+        try:
+            with pdfplumber.open(chemin_pdf) as pdf:
+                texte_complet = ""
+                toutes_lignes: list[dict] = []
+
+                for num_page, page in enumerate(pdf.pages):
+                    texte_page = page.extract_text() or ""
+                    texte_complet += "\n" + texte_page
+
+                    if num_page == 0:
+                        self._extraire_metadonnees(texte_page, releve)
+
+                    lignes = self._extraire_lignes_page(texte_page, annee_fichier, mois_fichier)
+                    toutes_lignes.extend(lignes)
+
+                # Extraire les soldes depuis le texte complet
+                self._extraire_soldes(texte_complet, releve)
+
+                # Convertir en objets Transaction
+                releve.transactions = self._construire_transactions(toutes_lignes, chemin.name)
+
+        except ParseError:
+            raise
+        except Exception as e:
+            raise ParseError(f"Erreur lors du parsing de {chemin.name}: {e}") from e
+
+        logger.info(
+            f"{chemin.name} → {len(releve.transactions)} transactions | "
+            f"solde début={releve.solde_debut} fin={releve.solde_fin}"
+        )
+        return releve
+
+    # ── Extraction des métadonnées ────────────────────────────────────────────
+
+    def _annee_depuis_nom(self, nom: str) -> int:
+        """Extrait l'année depuis le nom de fichier (YYYY dans YYYY-MM-DD ou YYYYMMDD)."""
+        # Format : releve_6804150W020_2024-01-31.pdf
+        m = re.search(r"(\d{4})-\d{2}-\d{2}", nom)
+        if m:
+            return int(m.group(1))
+        # Format ancien : releve_CCP6804150W020_20241031.pdf
+        m = re.search(r"(\d{4})\d{4}\.", nom)
+        if m:
+            return int(m.group(1))
+        return datetime.now().year
+
+    def _mois_depuis_nom(self, nom: str) -> Optional[int]:
+        """Extrait le mois depuis le nom de fichier."""
+        m = re.search(r"\d{4}-(\d{2})-\d{2}", nom)
+        if m:
+            return int(m.group(1))
+        return None
+
+    def _extraire_metadonnees(self, texte: str, releve: ReleveInfo) -> None:
+        """Extrait le numéro de compte et la période depuis la première page."""
+        # Numéro de compte
+        m = _RE_NUMERO_COMPTE.search(texte)
+        if m:
+            releve.numero_compte = m.group(1)
+
+        # Période (ex: "Arrêté mensuel du 30 décembre 2023 au 31 janvier 2024")
+        m = _RE_PERIODE.search(texte)
+        if m:
+            releve.periode_debut = _parse_date_complete(m.group(1))
+            releve.periode_fin = _parse_date_complete(m.group(2))
+
+    def _extraire_soldes(self, texte: str, releve: ReleveInfo) -> None:
+        """
+        Extrait les soldes d'ouverture et de clôture.
+
+        Format observé sur les relevés 2024 :
+          - Nouveau solde : sur une seule ligne
+              "Nouveau solde au 31/01/2024 + 4 972,13 €"
+          - Ancien solde  : montant sur la ligne PRÉCÉDENTE, label sur la suivante
+              "4 424,17"
+              "Ancien solde au 29/12/2023"
+        """
+        # Nouveau solde (une seule ligne)
+        m = _RE_NOUVEAU_SOLDE.search(texte.lower())
+        if m:
+            releve.solde_fin = _parse_montant(m.group(1))
+
+        # Ancien solde : chercher le montant sur la ligne précédente
+        lignes = texte.split("\n")
+        for i, ligne in enumerate(lignes):
+            if "ancien solde" in ligne.lower() and i > 0:
+                # Le montant est sur la ligne précédente
+                montant = _parse_montant(lignes[i - 1].strip())
+                if montant is not None:
+                    releve.solde_debut = montant
+                    break
+                # Ou bien sur la même ligne (certains formats)
+                m2 = _RE_ANCIEN_SOLDE.search(ligne.lower())
+                if m2:
+                    releve.solde_debut = _parse_montant(m2.group(1))
+                    break
+
+    # ── Extraction des transactions ────────────────────────────────────────────
+
+    def _extraire_lignes_page(
+        self, texte: str, annee: int, mois_fichier: Optional[int]
+    ) -> list[dict]:
+        """
+        Extrait les lignes de transaction depuis le texte brut d'une page.
+
+        Format La Banque Postale observé en 2024 ::
+
+            03/01 PRELEVEMENT DE PayPal Europe S.a.r. 16,00   ← date + début libellé + MONTANT
+            l. et Cie S.C.A REF : 103158...                  ← suite libellé (pas de montant)
+            IDENT : LU96ZZZ...                                ← suite libellé (pas de montant)
+            08/01 REMISE DE CHEQUES DU 04/01/2024 50,00       ← transaction suivante
+
+        Règle clé : **le montant est toujours à la fin de la ligne qui porte la date**.
+        Les lignes de continuation (sans date) n'ont jamais de montant.
+
+        Args:
+            texte:        Texte brut de la page.
+            annee:        Année déduite du nom de fichier.
+            mois_fichier: Mois déduit du nom de fichier.
+
+        Returns:
+            Liste de dicts {date, libelle, debit, credit}.
+        """
+        lignes = texte.split("\n")
+        resultats = []
+        i = 0
+
+        while i < len(lignes):
+            ligne = lignes[i].strip()
+
+            if not ligne or self._est_ligne_ignoree(ligne):
+                i += 1
+                continue
+
+            # Une transaction commence par DD/MM suivi d'un espace et du libellé
+            m_date = re.match(r"^(\d{2})/(\d{2})\s+(.+)", ligne)
+            if not m_date:
+                i += 1
+                continue
+
+            jour = int(m_date.group(1))
+            mois = int(m_date.group(2))
+            premiere_ligne_contenu = m_date.group(3).strip()
+
+            try:
+                tx_date = date(annee, mois, jour)
+            except ValueError:
+                i += 1
+                continue
+
+            # ── Extraire le montant depuis la FIN de la première ligne ──────────
+            # Le montant est TOUJOURS sur la même ligne que la date.
+            debit, credit, libelle_debut = self._extraire_montants(premiere_ligne_contenu)
+
+            # ── Accumuler les lignes de continuation (suite du libellé) ─────────
+            libelle_parts = [libelle_debut]
+            j = i + 1
+            while j < len(lignes):
+                suite = lignes[j].strip()
+                if not suite:
+                    j += 1
+                    break
+                # Nouvelle transaction ou ligne ignorée → arrêt
+                if re.match(r"^\d{2}/\d{2}\s", suite) or self._est_ligne_ignoree(suite):
+                    break
+                libelle_parts.append(suite)
+                j += 1
+
+            libelle_final = " ".join(p for p in libelle_parts if p).strip()
+
+            if debit is not None or credit is not None:
+                resultats.append({
+                    "date": tx_date,
+                    "libelle": libelle_final,
+                    "debit": debit,
+                    "credit": credit,
+                })
+
+            i = j
+
+        return resultats
+
+    def _est_ligne_ignoree(self, ligne: str) -> bool:
+        """Retourne True pour les lignes à ignorer (en-têtes, totaux, pieds de page)."""
+        mots_cles_ignore = [
+            "TOTAL DES OPERATIONS", "TOTALDESOP", "Date Opération Débit",
+            "Date Op", "DØbit", "CrØdit", "Page ", "LA BANQUE POSTALE",
+            "Ancien solde", "Nouveau solde", "ArrŒtØ", "TVA sur",
+            "Pour faire opposition", "Garantie de vos",
+            "Vos opérations CCP", "Vos opérations",
+        ]
+        ligne_upper = ligne.upper()
+        return any(mot.upper() in ligne_upper for mot in mots_cles_ignore)
+
+    def _extraire_montants(
+        self, texte: str
+    ) -> tuple[Optional[Decimal], Optional[Decimal], str]:
+        """
+        Extrait le montant débit et/ou crédit depuis la fin d'une ligne de transaction.
+
+        Les relevés La Banque Postale ont deux colonnes numériques en fin de ligne :
+        soit un débit seul, soit un crédit seul (l'autre colonne étant vide).
+
+        Returns:
+            Tuple (debit, credit, libelle_sans_montants).
+            debit et credit sont mutuellement exclusifs (l'un est None).
+        """
+        # Pattern : un ou deux montants en fin de chaîne
+        # Montant = chiffres avec espaces optionnels + virgule + 2 chiffres
+        pattern = re.compile(r"\s+([\d\s ]+,\d{2})\s*$")
+
+        montants_trouves = []
+        texte_restant = texte
+
+        # Extraire jusqu'à 2 montants depuis la droite
+        for _ in range(2):
+            m = pattern.search(texte_restant)
+            if not m:
+                break
+            val = _parse_montant(m.group(1))
+            if val is not None and val > 0:
+                montants_trouves.insert(0, val)
+                texte_restant = texte_restant[:m.start()]
+            else:
+                break
+
+        if not montants_trouves:
+            return None, None, texte
+
+        # Sur le relevé La Banque Postale, la position détermine débit/crédit :
+        # - Si 1 seul montant : besoin du contexte (libellé) pour décider
+        # - Si 2 montants : premier = débit, deuxième = crédit (mais l'un vaut 0)
+
+        if len(montants_trouves) == 2:
+            # Cas peu fréquent : les deux colonnes remplies → prendre la non-nulle
+            if montants_trouves[0] > 0 and montants_trouves[1] == 0:
+                return montants_trouves[0], None, texte_restant
+            elif montants_trouves[1] > 0 and montants_trouves[0] == 0:
+                return None, montants_trouves[1], texte_restant
+            else:
+                # Les deux non nulles (rare) : heuristique par libellé
+                return montants_trouves[0], None, texte_restant
+
+        # 1 seul montant — déduire débit/crédit depuis le libellé
+        montant = montants_trouves[0]
+        if self._est_credit(texte_restant):
+            return None, montant, texte_restant
+        else:
+            return montant, None, texte_restant
+
+    def _est_credit(self, libelle: str) -> bool:
+        """
+        Détermine si une transaction est un crédit d'après son libellé.
+
+        Utilise des marqueurs sémantiques connus des relevés La Banque Postale.
+        """
+        libelle_upper = libelle.upper()
+        marqueurs_credit = [
+            # Tester les plus spécifiques EN PREMIER (éviter "VIREMENT DE"
+            # de matcher "VIREMENT INSTANTANE A" via sous-chaîne)
+            "VIREMENT INSTANTANE DE",  # Virement reçu d'une personne physique
+            "VIREMENT DE",             # "VIREMENT DE STRIPE", "VIREMENT DE MME..."
+            "VIREMENT RECU",
+            "REMISE DE CHEQUES",
+            "VERSEMENT CARTE", "VERSEMENT DAB", "VERSEMENT ESPECES",
+            "STRIPE", "HELLOASSO",
+            "WEEZEVENT", "WOOPAYMENTS",
+            "AVOIR",
+        ]
+        marqueurs_debit = [
+            "VIREMENT INSTANTANE A",   # Virement envoyé à une personne/société
+            "PRELEVEMENT DE", "PRELEVEMENT SEPA",
+            "VIREMENT POUR",           # "VIREMENT POUR REGIE DE LA MAIRIE..."
+            "VIREMENT EMIS",
+            "ACHAT CB", "PAIEMENT CB",
+            "COTISATION ADISPO", "FRAIS",
+        ]
+        for m in marqueurs_credit:
+            if m in libelle_upper:
+                return True
+        for m in marqueurs_debit:
+            if m in libelle_upper:
+                return False
+        # Par défaut : débit (plus fréquent pour les opérations ambiguës)
+        return False
+
+    def _construire_transactions(
+        self, lignes: list[dict], nom_fichier: str
+    ) -> list[Transaction]:
+        """
+        Convertit les lignes extraites en objets Transaction dédupliqués.
+
+        Args:
+            lignes:      Lignes brutes extraites.
+            nom_fichier: Nom du fichier PDF source.
+
+        Returns:
+            Liste de Transaction triée par date.
+        """
+        transactions = []
+        ids_vus: set[str] = set()
+
+        for ligne in lignes:
+            d = ligne["date"]
+            debit = ligne.get("debit")
+            credit = ligne.get("credit")
+            libelle = ligne.get("libelle", "").strip()
+
+            if not libelle:
+                continue
+
+            if debit is not None:
+                montant = -abs(debit)
+            elif credit is not None:
+                montant = abs(credit)
+            else:
+                continue
+
+            t = Transaction(
+                date=d,
+                libelle=libelle,
+                montant=montant,
+                source_fichier=nom_fichier,
+            )
+
+            if t.id_unique not in ids_vus:
+                ids_vus.add(t.id_unique)
+                transactions.append(t)
+
+        return sorted(transactions, key=lambda x: x.date)
+
+    def parser_dossier(self, chemin_dossier: str) -> list[ReleveInfo]:
+        """
+        Parse tous les PDF d'un dossier.
+
+        Args:
+            chemin_dossier: Chemin vers le dossier.
+
+        Returns:
+            Liste de ReleveInfo triée par date de début de période.
+        """
+        dossier = Path(chemin_dossier)
+        if not dossier.is_dir():
+            raise NotADirectoryError(f"Dossier introuvable : {chemin_dossier}")
+
+        releves = []
+        for pdf in sorted(dossier.glob("*.pdf")):
+            try:
+                releve = self.parser_fichier(str(pdf))
+                releves.append(releve)
+            except (ParseError, FileNotFoundError) as e:
+                logger.error(f"Erreur sur {pdf.name} : {e}")
+
+        releves.sort(key=lambda r: r.periode_debut or date.min)
+        return releves

@@ -1,0 +1,82 @@
+# ============================================================
+# DONNÉES SENSIBLES — NE JAMAIS COMMITTER
+# ============================================================
+
+# Configuration réelle de l'association (IBAN, SIRET, Waldec...)
+config/association.json
+config/confidential.py
+
+# Données comptables (transactions, relevés copiés)
+data/
+
+# ============================================================
+# PYTHON
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.whl
+.installed.cfg
+MANIFEST
+.Python
+env/
+venv/
+ENV/
+.venv/
+comptasso_venv/
+
+# ============================================================
+# LOGS ET FICHIERS TEMPORAIRES
+# ============================================================
+*.log
+comptasso.log
+*.tmp
+chk.py
+run_chk.bat
+debug_parser.py
+
+# ============================================================
+# OS
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# ============================================================
+# IDE
+# ============================================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.claude/
+
+# ============================================================
+# TESTS ET COUVERTURE
+# ============================================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ============================================================
+# DISTRIBUTION
+# ============================================================
+*.spec
+dist_exe/
