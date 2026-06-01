@@ -1,0 +1,38 @@
+/* CommonLedger — Personnalisation Sphinx RTD Theme */
+
+/* Couleurs de marque */
+:root {
+    --cl-navy: #1a3a5c;
+    --cl-gold: #F0C040;
+    --cl-light: #e8f0f7;
+}
+
+/* Barre latérale */
+.wy-side-nav-search {
+    background-color: var(--cl-navy) !important;
+}
+.wy-nav-top {
+    background-color: var(--cl-navy) !important;
+}
+
+/* Liens */
+a { color: var(--cl-navy); }
+a:hover { color: var(--cl-gold); }
+
+/* Blocs de code */
+.highlight {
+    background: #f8f9fa;
+    border-left: 4px solid var(--cl-navy);
+}
+
+/* Badges version */
+.rst-badge { background: var(--cl-navy); }
+
+/* Accessibilité — focus visible */
+:focus {
+    outline: 3px solid var(--cl-gold) !important;
+    outline-offset: 2px;
+}
+
+/* Titres de section */
+h1, h2, h3 { color: var(--cl-navy); }
