@@ -53,13 +53,16 @@ class Transaction:
         """
         Génère l'id_unique si absent.
 
-        Utilise un hash du libellé complet pour distinguer deux transactions
-        ayant la même date et le même montant mais des libellés différents
-        (ex : deux prélèvements PayPal le même jour avec des REF distincts).
+        Utilise MD5 (déterministe entre sessions Python) du libellé complet
+        pour distinguer deux transactions de même date/montant mais libellés
+        différents (ex : deux prélèvements PayPal le même jour, REF distincts).
+
+        Note : hash() Python n'est PAS utilisé car il change à chaque session
+        (PYTHONHASHSEED aléatoire depuis Python 3.3).
         """
         if not self.id_unique:
-            # hash() garantit l'unicité même si seule la fin du libellé diffère
-            h = abs(hash(self.libelle))
+            import hashlib
+            h = hashlib.md5(self.libelle.encode("utf-8", errors="replace")).hexdigest()[:12]
             self.id_unique = f"{self.date.isoformat()}_{self.montant}_{h}"
 
     @property

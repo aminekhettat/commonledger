@@ -14,7 +14,7 @@
       "id": "dons",
       "label": "Dons",
       "description": "Dons manuels ou via HelloAsso / Stripe",
-      "mots_cles": ["DON", "LIBERALITE", "HELLOASSO", "STRIPE HELLOASSO"],
+      "mots_cles": ["DON", "LIBERALITE", "HELLOASSO", "STRIPE HELLOASSO", "NADJIB", "BEN EL KADI"],
       "split_autorise": true,
       "couleur_graphique": "#4CAF50"
     },
@@ -43,10 +43,19 @@
       "couleur_graphique": "#00BCD4"
     },
     {
+      "id": "pret_recu",
+      "label": "Prêt / avance remboursable",
+      "description": "Somme prêtée à l'association par un membre ou tiers — à rembourser, NE compte PAS comme recette dans le résultat net",
+      "mots_cles": ["PRET", "AVANCE REMBOURSABLE", "PARTICIPATION REMBOURSABLE"],
+      "split_autorise": false,
+      "hors_resultat": true,
+      "couleur_graphique": "#FF8F00"
+    },
+    {
       "id": "autres_recettes",
       "label": "Autres recettes",
-      "description": "Recettes diverses non classifiées",
-      "mots_cles": [],
+      "description": "Recettes diverses non classifiées (tests bancaires, remboursements divers…)",
+      "mots_cles": ["GOOGLE IRELAND"],
       "split_autorise": true,
       "couleur_graphique": "#9E9E9E"
     }
