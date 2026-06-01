@@ -45,11 +45,25 @@ comptasso_venv/
 # LOGS ET FICHIERS TEMPORAIRES
 # ============================================================
 *.log
-comptasso.log
 *.tmp
+*.txt
+
+# Scripts de débogage et utilitaires locaux
 chk.py
 run_chk.bat
+push*.bat
 debug_parser.py
+patch_parser.py
+analyze_accounting*.py
+analysis_output.txt
+audit_*.txt
+*_final.txt
+init_git.bat
+commit_final.bat
+add_gitattributes.bat
+gh_publish.bat
+remove_sensitive.bat
+push_github.bat
 
 # ============================================================
 # OS
