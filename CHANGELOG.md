@@ -1,7 +1,36 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-06-02)
+
+### Features
+
+- Support cross-year fiscal periods (e.g. Sept 2025 to Aug 2026)
+  ([`272e0c7`](https://github.com/aminekhettat/commonledger/commit/272e0c78aabbe1fce683aa5793cb82ddb696f490))
+
+Exercice.date_fin can now extend into the year following annee,
+
+enabling non-calendar fiscal years used by many associations.
+
+Rules:
+
+- date_debut must belong to self.annee (identifies the exercise)
+
+- date_fin can be in annee or annee+1 (max 31/12/annee+1)
+
+- libelle property: '2025' for same-year, '2025-2026' for cross-year
+
+- Validation in ImportWidget updated accordingly
+
+- 333 tests, 100 coverage
+
+
 ## v0.3.0 (2026-06-02)
+
+### Chores
+
+- **release**: V0.3.0 [skip ci]
+  ([`f87ff28`](https://github.com/aminekhettat/commonledger/commit/f87ff28239229f1e1fdd6191f50c226426985c02))
 
 ### Features
 
