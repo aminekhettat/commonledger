@@ -55,6 +55,44 @@ class TestExercice:
         assert nb == 2
         assert len(ex.transactions) == 2
 
+    def test_importer_releve_filtre_hors_annee(self, tmp_path):
+        """Les transactions d'autres années sont silencieusement ignorées."""
+        from core.parser.models import ReleveInfo
+
+        ex = Exercice(2025, str(tmp_path))
+        releve = ReleveInfo(fichier="releve_chevauchant.pdf", valide=True)
+        releve.transactions = [
+            # Transaction 2024 → doit être ignorée
+            Transaction(date=date(2024, 12, 15), libelle="TX 2024", montant=Decimal("100")),
+            Transaction(date=date(2024, 12, 31), libelle="TX FIN 2024", montant=Decimal("-50")),
+            # Transactions 2025 → doivent être conservées
+            Transaction(date=date(2025, 1, 8), libelle="TX JANVIER 2025", montant=Decimal("200")),
+            Transaction(date=date(2025, 2, 10), libelle="TX FEVRIER 2025", montant=Decimal("-30")),
+        ]
+
+        nb = ex.importer_releve(releve, copier_pdf=False)
+
+        # Seules les 2 transactions 2025 doivent être importées
+        assert nb == 2, f"Attendu 2 transactions, obtenu {nb}"
+        assert len(ex.transactions) == 2
+        for t in ex.transactions:
+            assert t.date.year == 2025, f"Transaction hors exercice importée : {t.date}"
+
+    def test_importer_releve_toutes_hors_annee(self, tmp_path):
+        """Relevé entièrement hors exercice → 0 transaction importée."""
+        from core.parser.models import ReleveInfo
+
+        ex = Exercice(2025, str(tmp_path))
+        releve = ReleveInfo(fichier="releve_2024.pdf", valide=True)
+        releve.transactions = [
+            Transaction(date=date(2024, 6, 1), libelle="TX JUIN 2024", montant=Decimal("500")),
+            Transaction(date=date(2024, 7, 1), libelle="TX JUIL 2024", montant=Decimal("-100")),
+        ]
+
+        nb = ex.importer_releve(releve, copier_pdf=False)
+        assert nb == 0
+        assert ex.transactions == []
+
     def test_deduplication_import_double(self, tmp_path):
         from core.parser.models import ReleveInfo
 

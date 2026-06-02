@@ -54,7 +54,10 @@ class WorkerImport(QObject):
             if not pdfs:
                 self.erreur.emit(f"Aucun PDF trouvé dans : {self.dossier}")
                 return
-            stats = {"importes": 0, "ignores": 0, "erreurs": 0, "total_tx": 0}
+            stats = {
+                "importes": 0, "ignores": 0, "erreurs": 0,
+                "total_tx": 0, "hors_annee": 0,
+            }
             for i, pdf in enumerate(pdfs):
                 self.progression.emit(int((i+1)/len(pdfs)*100), f"Analyse : {pdf.name}")
                 try:
@@ -62,6 +65,12 @@ class WorkerImport(QObject):
                     if not releve.valide:
                         stats["ignores"] += 1
                         continue
+                    # Compter les transactions hors exercice AVANT import
+                    hors_periode = sum(
+                        1 for t in releve.transactions
+                        if t.date.year != self.annee
+                    )
+                    stats["hors_annee"] += hors_periode
                     nb = exercice.importer_releve(releve)
                     stats["importes"] += 1
                     stats["total_tx"] += nb
@@ -260,16 +269,23 @@ class ImportWidget(QWidget):
         self._btn_importer.setEnabled(True)
         self._barre_prog.setValue(100)
         msg = (
-            f"✅ Import terminé !\n"
-            f"  Relevés traités  : {stats['importes']}\n"
-            f"  Relevés ignorés  : {stats['ignores']}\n"
+            f"Import termine !\n"
+            f"  Releves traites  : {stats['importes']}\n"
+            f"  Releves ignores  : {stats['ignores']}\n"
             f"  Erreurs          : {stats['erreurs']}\n"
             f"  Nouvelles tx     : {stats['total_tx']}\n"
             f"  Total tx         : {len(exercice.transactions)}"
         )
+        if stats.get("hors_annee", 0) > 0:
+            msg += (
+                f"\n  ATTENTION : {stats['hors_annee']} transaction(s) hors exercice "
+                f"{exercice.annee} ont ete ignorees automatiquement.\n"
+                f"  (Certains releves couvrent plusieurs annees — seules les "
+                f"transactions de {exercice.annee} ont ete conservees.)"
+            )
         nc = len(exercice.transactions_non_categorisees())
         if nc:
-            msg += f"\n  ⚠ {nc} transaction(s) à catégoriser manuellement."
+            msg += f"\n  Attention : {nc} transaction(s) a categoriser manuellement."
         self._journal.append(msg)
         self._lbl_prog.setText(f"Import terminé — {stats['total_tx']} nouvelles transactions.")
         stats_cat = self._moteur.categoriser_lot(exercice.transactions)

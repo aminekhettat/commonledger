@@ -95,21 +95,42 @@ class Exercice:
             json.dump(data, f, ensure_ascii=False, indent=2)
         logger.info(f"Exercice {self.annee} sauvegardé : {len(self.transactions)} transactions.")
 
-    def importer_releve(self, releve: ReleveInfo, copier_pdf: bool = True) -> int:
+    def importer_releve(
+        self,
+        releve: ReleveInfo,
+        copier_pdf: bool = True,
+    ) -> int:
         """
         Intègre les transactions d'un relevé dans l'exercice.
 
-        Déduplique les transactions déjà présentes (même id_unique).
+        Filtre les transactions hors de l'année de l'exercice et déduplique
+        les transactions déjà présentes (même id_unique).
+
+        Un relevé peut couvrir plusieurs années (ex : août 2024 → février 2025
+        importé dans l'exercice 2025). Seules les transactions de l'année
+        correcte sont conservées ; les autres sont ignorées avec un log.
 
         Args:
             releve:      ReleveInfo issu du parseur.
             copier_pdf:  Si True, copie le PDF dans releves_importes/.
 
         Returns:
-            Nombre de nouvelles transactions ajoutées.
+            Nombre de nouvelles transactions ajoutées (hors doublons et hors année).
         """
+        # ── Filtrer par année de l'exercice ───────────────────────────────────
+        hors_annee = [t for t in releve.transactions if t.date.year != self.annee]
+        dans_annee = [t for t in releve.transactions if t.date.year == self.annee]
+
+        if hors_annee:
+            logger.warning(
+                f"{Path(releve.fichier).name if releve.fichier else 'relevé'} : "
+                f"{len(hors_annee)} transaction(s) hors exercice {self.annee} ignorée(s) "
+                f"(années présentes : "
+                f"{sorted({t.date.year for t in hors_annee})})."
+            )
+
         ids_existants = {t.id_unique for t in self.transactions}
-        nouvelles = [t for t in releve.transactions if t.id_unique not in ids_existants]
+        nouvelles = [t for t in dans_annee if t.id_unique not in ids_existants]
 
         self.transactions.extend(nouvelles)
         self.transactions.sort(key=lambda t: t.date)
