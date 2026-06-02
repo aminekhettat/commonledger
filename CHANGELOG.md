@@ -1,7 +1,20 @@
 # CHANGELOG
 
 
+## v0.1.7 (2026-06-02)
+
+### Testing
+
+- Integration bilans annuels 2013-2025 - 13 bilans generes avec verification
+  ([`564da76`](https://github.com/aminekhettat/commonledger/commit/564da76a521c584b4079bef30e988e29d7beff55))
+
+
 ## v0.1.6 (2026-06-01)
+
+### Chores
+
+- **release**: V0.1.6 [skip ci]
+  ([`90ea291`](https://github.com/aminekhettat/commonledger/commit/90ea2910b5ad7bd9a09dfb59c556f194d6fd6b6a))
 
 ### Testing
 
