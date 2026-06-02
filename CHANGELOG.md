@@ -1,7 +1,38 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-06-02)
+
+### Features
+
+- Save chart as PNG/SVG with exercise identification header/footer
+  ([`24e8189`](https://github.com/aminekhettat/commonledger/commit/24e8189e3fd05348cc95c5763ff6c533e86682fc))
+
+A 'Save chart' button is added below the matplotlib canvas.
+
+The saved image embeds identifying metadata as clean header/footer bands:
+
+header: association name, exercise label, period, chart type
+
+footer: generation date, CommonLedger version
+
+separator lines between header/chart/footer
+
+The figure is restored to its original state after saving (non-destructive).
+
+Default filename: Graphique_{libelle}_{type}_{YYYYMMDD}.png at 200 DPI.
+
+User can override destination via file dialog; offered to open after save.
+
+333 tests, 100 coverage.
+
+
 ## v0.5.0 (2026-06-02)
+
+### Chores
+
+- **release**: V0.5.0 [skip ci]
+  ([`d6fb880`](https://github.com/aminekhettat/commonledger/commit/d6fb880018bda19ded016ac8e0b5c6b17136f7ce))
 
 ### Features
 
