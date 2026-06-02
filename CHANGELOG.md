@@ -1,7 +1,36 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-06-02)
+
+### Bug Fixes
+
+- Strip PDF page-number artifacts glued to transaction labels
+  ([`a2e267c`](https://github.com/aminekhettat/commonledger/commit/a2e267c4ed140349de80410e9eac98009caeeb52))
+
+pdfplumber can merge a page number (e.g. '4') directly with the first word
+
+of a transaction label on a new page, producing '4COTISATION' instead of
+
+'COTISATION'. Fixed by: (1) detecting lone-digit lines in _est_ligne_ignoree,
+
+(2) stripping leading digits immediately followed by an uppercase letter in
+
+the final libelle (regex ^\d+[A-Z...] - safe: spaces prevent false positives).
+
+Also corrected misleading comment in csv_parser.comparer_avec_pdf:
+
+CSV contains the FULL label; PDF truncates it. Comparison by (date, montant)
+
+is correct and intentional given this structural difference.
+
+
 ## v0.2.0 (2026-06-02)
+
+### Chores
+
+- **release**: V0.2.0 [skip ci]
+  ([`56c8393`](https://github.com/aminekhettat/commonledger/commit/56c8393aa9d1536aec6f6308f8c2c323730a433d))
 
 ### Features
 
