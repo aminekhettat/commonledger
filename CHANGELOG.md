@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.2.2 (2026-06-02)
+
+### Bug Fixes
+
+- Filter out-of-year transactions on import, warn user in journal
+  ([`f02a8df`](https://github.com/aminekhettat/commonledger/commit/f02a8df4f0993708809ee82fd9e46c3eddb5b7c4))
+
+Exercice.importer_releve now silently discards transactions whose year
+
+does not match the exercice year (e.g. a CSV covering Aug 2024-Feb 2025
+
+imported into Exercice(2025) kept the 2024 transactions). A warning is
+
+logged and displayed in the import journal when transactions are filtered.
+
+322 tests, 100 coverage.
+
+
 ## v0.2.1 (2026-06-02)
 
 ### Bug Fixes
@@ -23,6 +41,11 @@ Also corrected misleading comment in csv_parser.comparer_avec_pdf:
 CSV contains the FULL label; PDF truncates it. Comparison by (date, montant)
 
 is correct and intentional given this structural difference.
+
+### Chores
+
+- **release**: V0.2.1 [skip ci]
+  ([`1f8214e`](https://github.com/aminekhettat/commonledger/commit/1f8214e99266a4cdac12c01bb5f29a10725812ec))
 
 
 ## v0.2.0 (2026-06-02)
