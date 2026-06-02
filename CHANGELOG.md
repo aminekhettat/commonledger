@@ -1,7 +1,32 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-06-02)
+
+### Features
+
+- Add CSV parser for La Banque Postale exports and accessibility live regions
+  ([`27aa040`](https://github.com/aminekhettat/commonledger/commit/27aa04051fdaebb34fc2de3b472fa2b5dd641c53))
+
+- CSVParserLaBanquePostale: parse La Banque Postale portal CSV exports (UTF-8-BOM, semicolon, French
+  numbers)
+
+- Aggregate transactions across overlapping CSV files with deduplication
+
+- Gap detection (>45 days between transactions, missing year start/end coverage)
+
+- Compare CSV vs PDF results by (date, montant) matching ÔÇö 98.4 LiveRegion, JournalLive,
+  StatusBarLive classes for real-time NVDA/JAWS announcements
+
+- 320 tests, 100 coverage
+
+
 ## v0.1.8 (2026-06-02)
+
+### Chores
+
+- **release**: V0.1.8 [skip ci]
+  ([`413b8f5`](https://github.com/aminekhettat/commonledger/commit/413b8f50c8ed2379932adf78c966ef786a165706))
 
 ### Testing
 
