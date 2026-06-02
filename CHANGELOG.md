@@ -1,7 +1,40 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-06-02)
+
+### Features
+
+- Persistent report output directory (dossier_rapports)
+  ([`d34c133`](https://github.com/aminekhettat/commonledger/commit/d34c13383c3e48f69dcd54989c6302bd28a2da52))
+
+The user can now choose and remember a default output directory for
+
+generated reports (Word/PDF), configurable from both the Report tab
+
+and the Settings tab.
+
+- ReportWidget: 'Dossier de sortie des rapports' group with text field
+
++ Browse button; persists to config/association.json on change;
+
+auto-names reports as Rapport_{libelle}_{type}_{YYYYMMDD}.docx;
+
+warns if directory is invalid before generating
+
+- SettingsWidget: same field in the association parameters tab
+
+- Both widgets stay in sync via set_config() signal
+
+- 333 tests, 100 coverage
+
+
 ## v0.4.0 (2026-06-02)
+
+### Chores
+
+- **release**: V0.4.0 [skip ci]
+  ([`6b04a71`](https://github.com/aminekhettat/commonledger/commit/6b04a71d18f099da04add324cd556b39a4dd0f6e))
 
 ### Features
 
