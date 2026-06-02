@@ -59,15 +59,46 @@ class Exercice:
         self.solde_initial: Decimal = Decimal("0")
         self.budget: dict[str, Decimal] = {}
 
+        # Période de l'exercice — par défaut l'année complète, configurable
+        # pour les exercices partiels (ex : 01/06/2025 – 30/06/2025).
+        self._date_debut: date = date(annee, 1, 1)
+        self._date_fin: date = date(annee, 12, 31)
+
         self._charger()
 
     @property
     def date_debut(self) -> date:
-        return date(self.annee, 1, 1)
+        """Début de la période de l'exercice (défaut : 1er janvier)."""
+        return self._date_debut
+
+    @date_debut.setter
+    def date_debut(self, valeur: date) -> None:
+        if valeur.year != self.annee:
+            raise ValueError(
+                f"date_debut {valeur} doit appartenir à l'année {self.annee}."
+            )
+        if valeur > self._date_fin:
+            raise ValueError(
+                f"date_debut {valeur} doit être antérieure à date_fin {self._date_fin}."
+            )
+        self._date_debut = valeur
 
     @property
     def date_fin(self) -> date:
-        return date(self.annee, 12, 31)
+        """Fin de la période de l'exercice (défaut : 31 décembre)."""
+        return self._date_fin
+
+    @date_fin.setter
+    def date_fin(self, valeur: date) -> None:
+        if valeur.year != self.annee:
+            raise ValueError(
+                f"date_fin {valeur} doit appartenir à l'année {self.annee}."
+            )
+        if valeur < self._date_debut:
+            raise ValueError(
+                f"date_fin {valeur} doit être postérieure à date_debut {self._date_debut}."
+            )
+        self._date_fin = valeur
 
     def _charger(self) -> None:
         """Charge les transactions et métadonnées persistées."""
@@ -79,6 +110,12 @@ class Exercice:
             self.solde_initial = Decimal(data.get("solde_initial", "0"))
             self.releves = data.get("releves", [])
             self.budget = {k: Decimal(v) for k, v in data.get("budget", {}).items()}
+            # Charger la période si elle a été configurée (rétrocompatibilité :
+            # les anciens exercices n'ont pas ces champs → on garde les défauts)
+            if "date_debut" in data:
+                self._date_debut = date.fromisoformat(data["date_debut"])
+            if "date_fin" in data:
+                self._date_fin = date.fromisoformat(data["date_fin"])
             logger.info(f"Exercice {self.annee} : {len(self.transactions)} transactions chargées.")
 
     def sauvegarder(self) -> None:
@@ -86,6 +123,8 @@ class Exercice:
         fichier_tx = self.repertoire / "transactions.json"
         data = {
             "annee": self.annee,
+            "date_debut": self._date_debut.isoformat(),
+            "date_fin": self._date_fin.isoformat(),
             "solde_initial": str(self.solde_initial),
             "releves": self.releves,
             "budget": {k: str(v) for k, v in self.budget.items()},
@@ -117,20 +156,27 @@ class Exercice:
         Returns:
             Nombre de nouvelles transactions ajoutées (hors doublons et hors année).
         """
-        # ── Filtrer par année de l'exercice ───────────────────────────────────
-        hors_annee = [t for t in releve.transactions if t.date.year != self.annee]
-        dans_annee = [t for t in releve.transactions if t.date.year == self.annee]
+        # ── Filtrer par période de l'exercice ────────────────────────────────
+        # La période est self.date_debut → self.date_fin (peut être inférieure
+        # à une année complète pour les exercices partiels).
+        dans_periode = [
+            t for t in releve.transactions
+            if self._date_debut <= t.date <= self._date_fin
+        ]
+        hors_periode = [
+            t for t in releve.transactions
+            if not (self._date_debut <= t.date <= self._date_fin)
+        ]
 
-        if hors_annee:
+        if hors_periode:
             logger.warning(
                 f"{Path(releve.fichier).name if releve.fichier else 'relevé'} : "
-                f"{len(hors_annee)} transaction(s) hors exercice {self.annee} ignorée(s) "
-                f"(années présentes : "
-                f"{sorted({t.date.year for t in hors_annee})})."
+                f"{len(hors_periode)} transaction(s) hors période "
+                f"{self._date_debut} → {self._date_fin} ignorée(s)."
             )
 
         ids_existants = {t.id_unique for t in self.transactions}
-        nouvelles = [t for t in dans_annee if t.id_unique not in ids_existants]
+        nouvelles = [t for t in dans_periode if t.id_unique not in ids_existants]
 
         self.transactions.extend(nouvelles)
         self.transactions.sort(key=lambda t: t.date)

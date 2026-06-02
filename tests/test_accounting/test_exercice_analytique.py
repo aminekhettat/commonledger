@@ -22,6 +22,55 @@ class TestExercice:
         assert ex.date_debut == date(2024, 1, 1)
         assert ex.date_fin == date(2024, 12, 31)
 
+    def test_date_debut_fin_configurables(self, tmp_path):
+        """La période peut être restreinte à une partie de l'année."""
+        ex = Exercice(2025, str(tmp_path))
+        ex.date_debut = date(2025, 6, 1)
+        ex.date_fin = date(2025, 6, 30)
+        assert ex.date_debut == date(2025, 6, 1)
+        assert ex.date_fin == date(2025, 6, 30)
+
+    def test_date_debut_fin_persistees(self, tmp_path):
+        """La période configurée est sauvegardée et rechargée."""
+        ex = Exercice(2025, str(tmp_path))
+        ex.date_debut = date(2025, 4, 1)
+        ex.date_fin = date(2025, 9, 30)
+        ex.sauvegarder()
+
+        ex2 = Exercice(2025, str(tmp_path))
+        assert ex2.date_debut == date(2025, 4, 1)
+        assert ex2.date_fin == date(2025, 9, 30)
+
+    def test_date_debut_mauvaise_annee(self, tmp_path):
+        """date_debut hors de l'année de l'exercice → ValueError."""
+        import pytest
+        ex = Exercice(2025, str(tmp_path))
+        with pytest.raises(ValueError, match="2025"):
+            ex.date_debut = date(2024, 12, 31)
+
+    def test_date_fin_mauvaise_annee(self, tmp_path):
+        """date_fin hors de l'année de l'exercice → ValueError."""
+        import pytest
+        ex = Exercice(2025, str(tmp_path))
+        with pytest.raises(ValueError, match="2025"):
+            ex.date_fin = date(2026, 1, 1)
+
+    def test_date_debut_apres_date_fin(self, tmp_path):
+        """date_debut postérieure à date_fin → ValueError."""
+        import pytest
+        ex = Exercice(2025, str(tmp_path))
+        ex.date_fin = date(2025, 6, 30)
+        with pytest.raises(ValueError, match="antérieure"):
+            ex.date_debut = date(2025, 7, 1)
+
+    def test_date_fin_avant_date_debut(self, tmp_path):
+        """date_fin antérieure à date_debut → ValueError."""
+        import pytest
+        ex = Exercice(2025, str(tmp_path))
+        ex.date_debut = date(2025, 6, 1)
+        with pytest.raises(ValueError, match="postérieure"):
+            ex.date_fin = date(2025, 5, 31)
+
     def test_sauvegarder_et_recharger(self, tmp_path):
         ex = Exercice(2024, str(tmp_path))
         ex.solde_initial = Decimal("4424.17")
@@ -55,31 +104,52 @@ class TestExercice:
         assert nb == 2
         assert len(ex.transactions) == 2
 
-    def test_importer_releve_filtre_hors_annee(self, tmp_path):
-        """Les transactions d'autres années sont silencieusement ignorées."""
+    def test_importer_releve_filtre_hors_periode(self, tmp_path):
+        """Les transactions hors de la période configurée sont ignorées."""
         from core.parser.models import ReleveInfo
 
         ex = Exercice(2025, str(tmp_path))
-        releve = ReleveInfo(fichier="releve_chevauchant.pdf", valide=True)
+        # Exercice partiel : juin seulement
+        ex.date_debut = date(2025, 6, 1)
+        ex.date_fin = date(2025, 6, 30)
+
+        releve = ReleveInfo(fichier="releve_2025.pdf", valide=True)
         releve.transactions = [
-            # Transaction 2024 → doit être ignorée
-            Transaction(date=date(2024, 12, 15), libelle="TX 2024", montant=Decimal("100")),
-            Transaction(date=date(2024, 12, 31), libelle="TX FIN 2024", montant=Decimal("-50")),
-            # Transactions 2025 → doivent être conservées
-            Transaction(date=date(2025, 1, 8), libelle="TX JANVIER 2025", montant=Decimal("200")),
-            Transaction(date=date(2025, 2, 10), libelle="TX FEVRIER 2025", montant=Decimal("-30")),
+            # Hors période (mai) → ignorée
+            Transaction(date=date(2025, 5, 15), libelle="TX MAI", montant=Decimal("100")),
+            # Dans la période (juin) → conservée
+            Transaction(date=date(2025, 6, 10), libelle="TX JUIN", montant=Decimal("200")),
+            Transaction(date=date(2025, 6, 30), libelle="TX FIN JUIN", montant=Decimal("-30")),
+            # Hors période (juillet) → ignorée
+            Transaction(date=date(2025, 7, 1), libelle="TX JUILLET", montant=Decimal("-50")),
         ]
 
         nb = ex.importer_releve(releve, copier_pdf=False)
-
-        # Seules les 2 transactions 2025 doivent être importées
         assert nb == 2, f"Attendu 2 transactions, obtenu {nb}"
         assert len(ex.transactions) == 2
         for t in ex.transactions:
-            assert t.date.year == 2025, f"Transaction hors exercice importée : {t.date}"
+            assert date(2025, 6, 1) <= t.date <= date(2025, 6, 30)
 
-    def test_importer_releve_toutes_hors_annee(self, tmp_path):
-        """Relevé entièrement hors exercice → 0 transaction importée."""
+    def test_importer_releve_filtre_annee_differente(self, tmp_path):
+        """Les transactions d'une autre année sont ignorées (période par défaut)."""
+        from core.parser.models import ReleveInfo
+
+        ex = Exercice(2025, str(tmp_path))
+        # Période par défaut : 01/01/2025 → 31/12/2025
+        releve = ReleveInfo(fichier="releve_chevauchant.pdf", valide=True)
+        releve.transactions = [
+            Transaction(date=date(2024, 12, 31), libelle="TX 2024", montant=Decimal("-50")),
+            Transaction(date=date(2025, 1, 8), libelle="TX 2025", montant=Decimal("200")),
+            Transaction(date=date(2025, 2, 10), libelle="TX FEV 2025", montant=Decimal("-30")),
+        ]
+
+        nb = ex.importer_releve(releve, copier_pdf=False)
+        assert nb == 2
+        for t in ex.transactions:
+            assert t.date.year == 2025
+
+    def test_importer_releve_toutes_hors_periode(self, tmp_path):
+        """Relevé entièrement hors période → 0 transaction importée."""
         from core.parser.models import ReleveInfo
 
         ex = Exercice(2025, str(tmp_path))

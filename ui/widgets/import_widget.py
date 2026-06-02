@@ -16,9 +16,10 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QSpinBox, QLineEdit, QPushButton, QProgressBar, QTextEdit,
-    QFileDialog, QDoubleSpinBox, QSizePolicy,
+    QFileDialog, QDoubleSpinBox, QSizePolicy, QMessageBox,
 )
-from PySide6.QtCore import Qt, Signal, QThread, QObject
+from PySide6.QtCore import Qt, Signal, QThread, QObject, QDate
+from PySide6.QtWidgets import QDateEdit
 
 from core.parser import LaPosteParser, ParseError
 from core.accounting import Exercice
@@ -37,10 +38,12 @@ class WorkerImport(QObject):
     termine = Signal(object, dict)
     erreur = Signal(str)
 
-    def __init__(self, dossier, annee, solde_initial, config_asso):
+    def __init__(self, dossier, annee, date_debut, date_fin, solde_initial, config_asso):
         super().__init__()
         self.dossier = dossier
         self.annee = annee
+        self.date_debut = date_debut  # datetime.date
+        self.date_fin = date_fin      # datetime.date
         self.solde_initial = solde_initial
         self.config_asso = config_asso
 
@@ -49,6 +52,8 @@ class WorkerImport(QObject):
             from decimal import Decimal
             parser = LaPosteParser(self.config_asso)
             exercice = Exercice(self.annee, "data")
+            exercice.date_debut = self.date_debut
+            exercice.date_fin = self.date_fin
             exercice.solde_initial = Decimal(str(self.solde_initial))
             pdfs = sorted(Path(self.dossier).glob("*.pdf"))
             if not pdfs:
@@ -68,7 +73,7 @@ class WorkerImport(QObject):
                     # Compter les transactions hors exercice AVANT import
                     hors_periode = sum(
                         1 for t in releve.transactions
-                        if t.date.year != self.annee
+                        if not (self.date_debut <= t.date <= self.date_fin)
                     )
                     stats["hors_annee"] += hors_periode
                     nb = exercice.importer_releve(releve)
@@ -109,29 +114,34 @@ class ImportWidget(QWidget):
         layout.addWidget(titre)
 
         # ── Groupe exercice ────────────────────────────────────────────────
-        grp_ex = QGroupBox("Exercice comptable")
+        grp_ex = QGroupBox("Exercice comptable — Période obligatoire")
         grp_ex.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         grp_ex.setAccessibleDescription(
-            "Sélectionnez l'année et le solde bancaire au 1er janvier."
+            "Définissez la période de l'exercice avant d'importer les relevés. "
+            "Champ obligatoire : les transactions hors période seront ignorées."
         )
-        lay_ex = QHBoxLayout(grp_ex)
+        lay_ex = QVBoxLayout(grp_ex)
         lay_ex.setContentsMargins(10, 8, 10, 8)
-        lay_ex.setSpacing(12)
+        lay_ex.setSpacing(8)
 
+        from datetime import date as dt_date
+        annee_courante = dt_date.today().year
+
+        # ── Ligne 1 : Année ────────────────────────────────────────────────
+        ligne1 = QHBoxLayout()
         lbl_annee = QLabel("Année :")
         self._spin_annee = QSpinBox()
         self._spin_annee.setRange(2010, 2099)
-        from datetime import date
-        self._spin_annee.setValue(date.today().year)
+        self._spin_annee.setValue(annee_courante)
         self._spin_annee.setFixedWidth(90)
         configurer_label_champ(lbl_annee, self._spin_annee,
                                "Année de l'exercice",
-                               "Sélectionnez l'année fiscale, par exemple 2024.")
-        lay_ex.addWidget(lbl_annee)
-        lay_ex.addWidget(self._spin_annee)
-        lay_ex.addSpacing(20)
+                               "Année fiscale — détermine le dossier de stockage.")
+        ligne1.addWidget(lbl_annee)
+        ligne1.addWidget(self._spin_annee)
+        ligne1.addSpacing(20)
 
-        lbl_solde = QLabel("Solde initial au 1er janvier :")
+        lbl_solde = QLabel("Solde initial :")
         self._spin_solde = QDoubleSpinBox()
         self._spin_solde.setRange(-999999.99, 999999.99)
         self._spin_solde.setDecimals(2)
@@ -139,13 +149,52 @@ class ImportWidget(QWidget):
         self._spin_solde.setMinimumWidth(140)
         self._spin_solde.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         configurer_label_champ(lbl_solde, self._spin_solde,
-                               "Solde bancaire initial",
-                               "Solde du compte au 1er janvier de l'exercice.")
-        lay_ex.addWidget(lbl_solde)
-        lay_ex.addWidget(self._spin_solde)
-        lay_ex.addStretch(1)
+                               "Solde bancaire au début de la période",
+                               "Solde du compte à la date de début de la période.")
+        ligne1.addWidget(lbl_solde)
+        ligne1.addWidget(self._spin_solde)
+        ligne1.addStretch(1)
+        lay_ex.addLayout(ligne1)
+
+        # ── Ligne 2 : Dates début et fin ───────────────────────────────────
+        ligne2 = QHBoxLayout()
+        lbl_debut = QLabel("Du (début) :")
+        self._date_debut = QDateEdit()
+        self._date_debut.setCalendarPopup(True)
+        self._date_debut.setDisplayFormat("dd/MM/yyyy")
+        self._date_debut.setDate(QDate(annee_courante, 1, 1))
+        self._date_debut.setMinimumWidth(130)
+        configurer_label_champ(lbl_debut, self._date_debut,
+                               "Date de début de la période",
+                               "Premier jour de la période analysée.")
+        ligne2.addWidget(lbl_debut)
+        ligne2.addWidget(self._date_debut)
+        ligne2.addSpacing(20)
+
+        lbl_fin = QLabel("Au (fin) :")
+        self._date_fin = QDateEdit()
+        self._date_fin.setCalendarPopup(True)
+        self._date_fin.setDisplayFormat("dd/MM/yyyy")
+        self._date_fin.setDate(QDate(annee_courante, 12, 31))
+        self._date_fin.setMinimumWidth(130)
+        configurer_label_champ(lbl_fin, self._date_fin,
+                               "Date de fin de la période",
+                               "Dernier jour de la période analysée.")
+        ligne2.addWidget(lbl_fin)
+        ligne2.addWidget(self._date_fin)
+
+        lbl_info = QLabel("(Exercice partiel possible — ex : 01/01 au 30/06)")
+        lbl_info.setStyleSheet("color: #666; font-style: italic; font-size: 11px;")
+        lbl_info.setAccessibleName("Information sur la période")
+        ligne2.addSpacing(12)
+        ligne2.addWidget(lbl_info)
+        ligne2.addStretch(1)
+        lay_ex.addLayout(ligne2)
 
         layout.addWidget(grp_ex)
+
+        # Quand l'année change, mettre à jour les dates par défaut
+        self._spin_annee.valueChanged.connect(self._on_annee_changee)
 
         # ── Groupe dossier ─────────────────────────────────────────────────
         grp_dos = QGroupBox("Dossier des relevés PDF")
@@ -221,9 +270,15 @@ class ImportWidget(QWidget):
 
         # Ordre de tabulation
         definir_ordre_tabulation([
-            self._spin_annee, self._spin_solde,
-            self._edit_dossier, self._btn_parcourir, self._btn_importer,
+            self._spin_annee, self._date_debut, self._date_fin,
+            self._spin_solde, self._edit_dossier,
+            self._btn_parcourir, self._btn_importer,
         ])
+
+    def _on_annee_changee(self, annee: int) -> None:
+        """Met à jour les dates par défaut quand l'année change."""
+        self._date_debut.setDate(QDate(annee, 1, 1))
+        self._date_fin.setDate(QDate(annee, 12, 31))
 
     def demander_annee(self):
         self._spin_annee.setFocus()
@@ -237,21 +292,59 @@ class ImportWidget(QWidget):
             self._edit_dossier.setText(d)
 
     def _lancer_import(self):
+        from datetime import date as dt_date
+
         dossier = self._edit_dossier.text().strip()
         if not dossier or not Path(dossier).is_dir():
-            self._journal.append("❌ Dossier invalide ou introuvable.")
+            self._journal.append("Dossier invalide ou introuvable.")
             return
+
         annee = self._spin_annee.value()
+        qd = self._date_debut.date()
+        qf = self._date_fin.date()
+        date_debut = dt_date(qd.year(), qd.month(), qd.day())
+        date_fin = dt_date(qf.year(), qf.month(), qf.day())
+
+        # ── Validation de la période ──────────────────────────────────────
+        erreurs = []
+        if date_debut.year != annee:
+            erreurs.append(
+                f"La date de début ({date_debut:%d/%m/%Y}) doit appartenir "
+                f"à l'année {annee}."
+            )
+        if date_fin.year != annee:
+            erreurs.append(
+                f"La date de fin ({date_fin:%d/%m/%Y}) doit appartenir "
+                f"à l'année {annee}."
+            )
+        if date_debut > date_fin:
+            erreurs.append(
+                f"La date de début ({date_debut:%d/%m/%Y}) doit être "
+                f"antérieure à la date de fin ({date_fin:%d/%m/%Y})."
+            )
+        if erreurs:
+            QMessageBox.warning(
+                self, "Période invalide",
+                "Impossible de lancer l'import :\n\n" + "\n".join(erreurs)
+            )
+            return
+
         solde = self._spin_solde.value()
         self._btn_importer.setEnabled(False)
         self._barre_prog.setVisible(True)
         self._barre_prog.setValue(0)
         self._journal.clear()
-        self._journal.append(f"▶ Import exercice {annee}  —  solde initial : {solde:,.2f} €")
+        self._journal.append(
+            f"Import exercice {annee}  "
+            f"({date_debut:%d/%m/%Y} -> {date_fin:%d/%m/%Y})  "
+            f"solde initial : {solde:,.2f} EUR"
+        )
         self._journal.append(f"  Dossier : {dossier}\n")
 
         self._thread = QThread()
-        self._worker = WorkerImport(dossier, annee, solde, self._config_asso)
+        self._worker = WorkerImport(
+            dossier, annee, date_debut, date_fin, solde, self._config_asso
+        )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progression.connect(self._on_progression)
@@ -278,10 +371,11 @@ class ImportWidget(QWidget):
         )
         if stats.get("hors_annee", 0) > 0:
             msg += (
-                f"\n  ATTENTION : {stats['hors_annee']} transaction(s) hors exercice "
-                f"{exercice.annee} ont ete ignorees automatiquement.\n"
-                f"  (Certains releves couvrent plusieurs annees — seules les "
-                f"transactions de {exercice.annee} ont ete conservees.)"
+                f"\n  ATTENTION : {stats['hors_annee']} transaction(s) hors periode "
+                f"({exercice.date_debut:%d/%m/%Y} -> {exercice.date_fin:%d/%m/%Y}) "
+                f"ignorees automatiquement.\n"
+                f"  (Certains releves couvrent une periode plus large — seules les "
+                f"transactions dans la periode saisie ont ete conservees.)"
             )
         nc = len(exercice.transactions_non_categorisees())
         if nc:
