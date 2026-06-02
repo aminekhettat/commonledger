@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-06-02)
+
+### Features
+
+- Mandatory period (date_debut/date_fin) on exercise import
+  ([`f01caf5`](https://github.com/aminekhettat/commonledger/commit/f01caf5fe5535afb642107e24e48c05a52a8b99c))
+
+The user must now enter an explicit start and end date before importing.
+
+This replaces the year-only validation with a proper date-range filter.
+
+Changes:
+
+- Exercice: date_debut/date_fin are now settable properties (validated),
+
+persisted in JSON, and used for transaction filtering in importer_releve
+
+(replaces t.date.year == annee with date_debut <= t.date <= date_fin)
+
+- Exercice: partial exercises supported (e.g. 01/06 to 30/06)
+
+- ImportWidget: two QDateEdit fields (auto-filled from year, adjustable)
+
+with validation before launch; warning shown if transactions filtered
+
+- 329 tests, 100 coverage
+
+
 ## v0.2.2 (2026-06-02)
 
 ### Bug Fixes
@@ -17,6 +45,11 @@ imported into Exercice(2025) kept the 2024 transactions). A warning is
 logged and displayed in the import journal when transactions are filtered.
 
 322 tests, 100 coverage.
+
+### Chores
+
+- **release**: V0.2.2 [skip ci]
+  ([`3547895`](https://github.com/aminekhettat/commonledger/commit/35478953a63796acdb1b13a66a6a23a4be93c339))
 
 
 ## v0.2.1 (2026-06-02)
