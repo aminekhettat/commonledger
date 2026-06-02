@@ -25,6 +25,7 @@ matplotlib.use("QtAgg")   # Backend Qt — intégration native PySide6
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
+import matplotlib.lines
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
@@ -98,10 +99,17 @@ class GraphiqueCanvas(FigureCanvas):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.updateGeometry()
         self._ax = None
+        self._vide = True   # True tant qu'aucun graphe n'a été tracé
         self._afficher_vide()
+
+    @property
+    def est_vide(self) -> bool:
+        """True si aucun graphique n'a encore été tracé."""
+        return self._vide
 
     def _afficher_vide(self):
         self._fig.clear()
+        self._vide = True
         ax = self._fig.add_subplot(111)
         ax.set_axis_off()
         ax.text(0.5, 0.5, "Cliquez sur\n« Calculer l'aperçu »\npour afficher le graphique",
@@ -109,6 +117,9 @@ class GraphiqueCanvas(FigureCanvas):
                 fontsize=11, color="#888888",
                 bbox=dict(boxstyle="round,pad=0.5", facecolor="#f8f9fa", alpha=0.8))
         self.draw()
+
+    def _marquer_non_vide(self):
+        self._vide = False
 
     def tracer_camembert(self, lignes: list, titre: str, couleur_titre: str = "#1a3a5c"):
         """Trace un camembert donut avec légende détaillée."""
@@ -160,6 +171,7 @@ class GraphiqueCanvas(FigureCanvas):
                   labelspacing=0.4)
 
         self._fig.tight_layout()
+        self._marquer_non_vide()
         self.draw()
 
     def tracer_histogramme(self, evolution: list, couleur: str = "#1a3a5c",
@@ -200,6 +212,7 @@ class GraphiqueCanvas(FigureCanvas):
             spine.set_visible(False)
 
         self._fig.tight_layout()
+        self._marquer_non_vide()
         self.draw()
 
     def tracer_courbe(self, evolution: list, solde_initial: Decimal,
@@ -233,7 +246,105 @@ class GraphiqueCanvas(FigureCanvas):
             spine.set_visible(False)
 
         self._fig.tight_layout()
+        self._marquer_non_vide()
         self.draw()
+
+    def sauvegarder_vers(
+        self,
+        chemin: str,
+        nom_asso: str,
+        libelle_exercice: str,
+        periode: str,
+        titre_graph: str,
+        version_app: str = "",
+        dpi: int = 150,
+    ) -> None:
+        """
+        Sauvegarde le graphique courant en PNG avec en-tête et pied de page.
+
+        L'opération est non-destructive : les textes ajoutés pour la sauvegarde
+        sont supprimés et la figure restaurée à son état d'affichage d'origine.
+
+        Args:
+            chemin:           Chemin complet du fichier PNG de sortie.
+            nom_asso:         Nom de l'association (en-tête).
+            libelle_exercice: Ex : "2025" ou "2025-2026".
+            periode:          Ex : "01/01/2025 → 31/12/2025".
+            titre_graph:      Type de graphique (ex : "Camembert — Recettes").
+            version_app:      Version de l'application (pied de page).
+            dpi:              Résolution PNG (défaut 150 dpi — bon compromis).
+        """
+        from datetime import date as dt_date
+
+        today = dt_date.today().strftime("%d/%m/%Y")
+        couleur_primaire = "#1a3a5c"
+        couleur_secondaire = "#888888"
+
+        # ── Ajuster les marges pour l'en-tête et le pied ─────────────────
+        self._fig.subplots_adjust(top=0.84, bottom=0.12)
+
+        # ── En-tête : ligne 1 — nom + exercice ───────────────────────────
+        t_nom = self._fig.text(
+            0.5, 0.96,
+            nom_asso,
+            ha="center", va="top",
+            fontsize=10, fontweight="bold", color=couleur_primaire,
+        )
+        t_ex = self._fig.text(
+            0.5, 0.92,
+            f"Exercice {libelle_exercice}   •   {periode}",
+            ha="center", va="top",
+            fontsize=8.5, color=couleur_primaire,
+        )
+        t_type = self._fig.text(
+            0.5, 0.88,
+            titre_graph,
+            ha="center", va="top",
+            fontsize=8, color=couleur_secondaire, style="italic",
+        )
+        # Ligne de séparation en-tête / graphe
+        ligne_haut = self._fig.add_artist(
+            matplotlib.lines.Line2D(
+                [0.05, 0.95], [0.855, 0.855],
+                transform=self._fig.transFigure,
+                color="#cccccc", linewidth=0.8,
+            )
+        )
+        # ── Pied de page ─────────────────────────────────────────────────
+        pied_gauche = self._fig.text(
+            0.05, 0.03,
+            f"Généré le {today}",
+            ha="left", va="bottom",
+            fontsize=7, color=couleur_secondaire,
+        )
+        pied_droit = self._fig.text(
+            0.95, 0.03,
+            f"CommonLedger{(' ' + version_app) if version_app else ''}",
+            ha="right", va="bottom",
+            fontsize=7, color=couleur_secondaire,
+        )
+        ligne_bas = self._fig.add_artist(
+            matplotlib.lines.Line2D(
+                [0.05, 0.95], [0.07, 0.07],
+                transform=self._fig.transFigure,
+                color="#cccccc", linewidth=0.8,
+            )
+        )
+
+        # ── Sauvegarder ──────────────────────────────────────────────────
+        try:
+            self._fig.savefig(chemin, dpi=dpi, bbox_inches="tight",
+                              facecolor="white", edgecolor="none")
+        finally:
+            # ── Restaurer l'état d'origine ───────────────────────────────
+            for artiste in [t_nom, t_ex, t_type, pied_gauche, pied_droit,
+                            ligne_haut, ligne_bas]:
+                try:
+                    artiste.remove()
+                except Exception:  # pragma: no cover
+                    pass
+            self._fig.tight_layout()
+            self.draw()
 
 
 class ReportWidget(QWidget):
@@ -347,6 +458,25 @@ class ReportWidget(QWidget):
             "Graphique matplotlib interactif. Sélectionnez le type avec le combo ci-dessus."
         )
         lay_g.addWidget(self._canvas, stretch=1)
+
+        # Bouton de sauvegarde du graphique
+        self._btn_sauvegarder_graph = QPushButton("💾 Sauvegarder le &graphique (PNG)")
+        self._btn_sauvegarder_graph.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._btn_sauvegarder_graph.setMinimumHeight(36)
+        self._btn_sauvegarder_graph.setStyleSheet(
+            "QPushButton{background:#2c7a3a;color:white;font-size:12px;"
+            "border-radius:5px;padding:6px;}"
+            "QPushButton:hover{background:#3a9e4d;}"
+            "QPushButton:disabled{background:#aaa;}"
+        )
+        configurer_bouton(
+            self._btn_sauvegarder_graph,
+            "Sauvegarder le graphique en PNG",
+            "Enregistre le graphique affiché en image PNG haute résolution "
+            "avec en-tête identifiant l'exercice et le type de graphique."
+        )
+        self._btn_sauvegarder_graph.clicked.connect(self._sauvegarder_graphique)
+        lay_g.addWidget(self._btn_sauvegarder_graph)
 
         self._splitter.addWidget(panneau_gauche)
 
@@ -547,6 +677,79 @@ class ReportWidget(QWidget):
             self._canvas.tracer_courbe(
                 cr.evolution_mensuelle(), cr.solde_initial, cp, cs
             )
+
+    def _sauvegarder_graphique(self) -> None:
+        """Sauvegarde le graphique courant en PNG avec métadonnées d'identification."""
+        if not self._exercice:
+            QMessageBox.warning(self, "Aucun exercice",
+                                "Importez d'abord un exercice (Alt+1).")
+            return
+        if self._canvas.est_vide:
+            QMessageBox.information(self, "Graphique vide",
+                                    "Calculez d'abord l'aperçu (bouton « Calculer »).")
+            return
+
+        from datetime import date as dt_date
+        # ── Construire le nom de fichier ──────────────────────────────────
+        label = getattr(self._exercice, "libelle", str(self._exercice.annee))
+        type_graph = self._combo_type_graph.currentData() or "graphique"
+        today = dt_date.today().strftime("%Y%m%d")
+        nom_defaut = f"Graphique_{label}_{type_graph}_{today}.png"
+
+        dossier_sortie = self._edit_dossier_sortie.text().strip()
+        if not dossier_sortie or not Path(dossier_sortie).is_dir():
+            dossier_sortie = str(Path.home())
+
+        chemin_defaut = str(Path(dossier_sortie) / nom_defaut)
+
+        # ── Demander confirmation de l'emplacement ────────────────────────
+        chemin, _ = QFileDialog.getSaveFileName(
+            self, "Sauvegarder le graphique",
+            chemin_defaut, "Images PNG (*.png);;Images SVG (*.svg)"
+        )
+        if not chemin:
+            return
+
+        # ── Récupérer les métadonnées d'identification ────────────────────
+        nom_asso = self._config.get("nom", "Association")
+        libelle_ex = getattr(self._exercice, "libelle", str(self._exercice.annee))
+        periode = (
+            f"{self._exercice.date_debut:%d/%m/%Y}"
+            f" → {self._exercice.date_fin:%d/%m/%Y}"
+        )
+        titre_graph = self._combo_type_graph.currentText()
+
+        # Version de l'application depuis pyproject.toml si disponible
+        try:
+            import importlib.metadata
+            version = importlib.metadata.version("commonledger")
+        except Exception:
+            version = ""
+
+        # ── Sauvegarder ──────────────────────────────────────────────────
+        try:
+            dpi = 200 if chemin.lower().endswith(".png") else 150
+            self._canvas.sauvegarder_vers(
+                chemin=chemin,
+                nom_asso=nom_asso,
+                libelle_exercice=libelle_ex,
+                periode=periode,
+                titre_graph=titre_graph,
+                version_app=version,
+                dpi=dpi,
+            )
+            self.message_status.emit(f"Graphique sauvegardé : {Path(chemin).name}")
+            # Proposer d'ouvrir le fichier
+            rep = QMessageBox.question(
+                self, "Graphique sauvegardé",
+                f"Graphique enregistré :\n{chemin}\n\nOuvrir le fichier ?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            )
+            if rep == QMessageBox.Yes:
+                import os
+                os.startfile(chemin)
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de sauvegarder le graphique :\n{e}")
 
     def _choisir_dossier_sortie(self) -> None:
         """Ouvre un sélecteur de dossier pour la destination des rapports."""
