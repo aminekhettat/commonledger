@@ -544,6 +544,12 @@ class LaPosteParser:
                 j += 1
 
             libelle_final = " ".join(p for p in libelle_parts if p).strip()
+            # Nettoyer les artefacts de numéro de page collés au début du libellé.
+            # pdfplumber peut fusionner un numéro de page (ex: "4") avec le premier
+            # mot de la ligne suivante → "4COTISATION" au lieu de "COTISATION".
+            # On supprime les chiffres initiaux si immédiatement suivis d'une
+            # lettre majuscule (signe que c'est un artefact, pas un vrai libellé).
+            libelle_final = re.sub(r"^\d+([A-ZÀÂÉÈÊÎÔÙÛÜ])", r"\1", libelle_final)
 
             if debit is not None or credit is not None:
                 resultats.append(
@@ -579,6 +585,9 @@ class LaPosteParser:
             "Vos opérations CCP",
             "Vos opérations",
         ]
+        # Ligne contenant uniquement un numéro de page (ex: "4", "12")
+        if re.match(r"^\d+$", ligne.strip()):
+            return True
         ligne_upper = ligne.upper()
         return any(mot.upper() in ligne_upper for mot in mots_cles_ignore)
 

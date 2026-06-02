@@ -501,9 +501,15 @@ class CSVParserLaBanquePostale:
         pdf_annee = [t for t in transactions_pdf if t.date.year == annee]
 
         # ── Correspondance par (date, montant) ────────────────────────────────
-        # Les libellés sont tronqués différemment dans CSV et PDF.
-        # On utilise un multiset (Counter) pour gérer les transactions
-        # identiques (même date+montant) qui pourraient apparaître plusieurs fois.
+        # Le CSV La Banque Postale contient le libellé COMPLET (avec référence
+        # bancaire complète, ex : "HELLOASSO REFERENCE : 018900850000050").
+        # Le PDF ne contient qu'une version TRONQUÉE du même libellé
+        # (la banque coupe à ~30 caractères dans le relevé papier/PDF).
+        # Les deux libellés sont donc structurellement différents → on ne peut
+        # pas comparer par id_unique (qui inclut un MD5 du libellé).
+        # On utilise (date, montant) comme clé de correspondance, avec un
+        # multiset (Counter) pour gérer les doublons légitimes (même jour,
+        # même montant, libellés différents — ex : deux virements Hello Asso).
         from collections import Counter
 
         def _cle(t: Transaction) -> tuple:
