@@ -1,7 +1,20 @@
 # CHANGELOG
 
 
+## v0.1.8 (2026-06-02)
+
+### Testing
+
+- Accessibility tests 10/11 pass - all widgets have accessibleName set
+  ([`21fe2b9`](https://github.com/aminekhettat/commonledger/commit/21fe2b96229c7d85390502be9d180388892ad8f4))
+
+
 ## v0.1.7 (2026-06-02)
+
+### Chores
+
+- **release**: V0.1.7 [skip ci]
+  ([`7933833`](https://github.com/aminekhettat/commonledger/commit/7933833c7b6da7f5c335da71b1302b0c6ea8fb15))
 
 ### Testing
 
