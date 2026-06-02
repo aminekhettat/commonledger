@@ -48,12 +48,43 @@ class TestExercice:
         with pytest.raises(ValueError, match="2025"):
             ex.date_debut = date(2024, 12, 31)
 
-    def test_date_fin_mauvaise_annee(self, tmp_path):
-        """date_fin hors de l'année de l'exercice → ValueError."""
+    def test_exercice_a_cheval_deux_annees(self, tmp_path):
+        """Un exercice peut s'étendre sur deux années (ex: sept 2025 – août 2026)."""
+        ex = Exercice(2025, str(tmp_path))
+        ex.date_debut = date(2025, 9, 1)
+        ex.date_fin = date(2026, 8, 31)
+        assert ex.date_debut == date(2025, 9, 1)
+        assert ex.date_fin == date(2026, 8, 31)
+        assert ex.libelle == "2025-2026"
+
+    def test_libelle_annee_simple(self, tmp_path):
+        """Libellé d'un exercice civique complet."""
+        ex = Exercice(2025, str(tmp_path))
+        assert ex.libelle == "2025"
+
+    def test_libelle_exercice_a_cheval(self, tmp_path):
+        """Libellé d'un exercice à cheval sur deux années."""
+        ex = Exercice(2025, str(tmp_path))
+        ex.date_fin = date(2026, 3, 31)
+        assert ex.libelle == "2025-2026"
+
+    def test_exercice_a_cheval_persiste(self, tmp_path):
+        """Les dates à cheval sont sauvegardées et rechargées."""
+        ex = Exercice(2025, str(tmp_path))
+        ex.date_debut = date(2025, 9, 1)
+        ex.date_fin = date(2026, 8, 31)
+        ex.sauvegarder()
+        ex2 = Exercice(2025, str(tmp_path))
+        assert ex2.date_debut == date(2025, 9, 1)
+        assert ex2.date_fin == date(2026, 8, 31)
+        assert ex2.libelle == "2025-2026"
+
+    def test_date_fin_depasse_annee_suivante(self, tmp_path):
+        """date_fin ne peut pas dépasser le 31/12 de l'année suivante."""
         import pytest
         ex = Exercice(2025, str(tmp_path))
-        with pytest.raises(ValueError, match="2025"):
-            ex.date_fin = date(2026, 1, 1)
+        with pytest.raises(ValueError, match="deux années"):
+            ex.date_fin = date(2027, 1, 1)
 
     def test_date_debut_apres_date_fin(self, tmp_path):
         """date_debut postérieure à date_fin → ValueError."""

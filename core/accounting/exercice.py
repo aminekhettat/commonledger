@@ -47,7 +47,10 @@ class Exercice:
         Initialise l'exercice et charge les données persistées si elles existent.
 
         Args:
-            annee:           Année de l'exercice (ex: 2024).
+            annee:           Année de début de l'exercice (ex: 2024).
+                             Sert d'identifiant et de nom de répertoire.
+                             Pour un exercice septembre 2025 → août 2026,
+                             passer annee=2025.
             repertoire_data: Répertoire racine des données (ex: "data").
         """
         self.annee = annee
@@ -59,23 +62,52 @@ class Exercice:
         self.solde_initial: Decimal = Decimal("0")
         self.budget: dict[str, Decimal] = {}
 
-        # Période de l'exercice — par défaut l'année complète, configurable
-        # pour les exercices partiels (ex : 01/06/2025 – 30/06/2025).
+        # Période de l'exercice — par défaut l'année civile complète.
+        # Configurable pour :
+        #   • exercices partiels      (ex : 01/06/2025 – 30/06/2025)
+        #   • exercices à cheval      (ex : 01/09/2025 – 31/08/2026)
         self._date_debut: date = date(annee, 1, 1)
         self._date_fin: date = date(annee, 12, 31)
 
         self._charger()
 
+    # ── Propriété libellé ──────────────────────────────────────────────────
+
+    @property
+    def libelle(self) -> str:
+        """
+        Libellé lisible de l'exercice.
+
+        Examples:
+            "2025"        pour un exercice civique (jan–déc 2025)
+            "2025-2026"   pour un exercice à cheval (sept 2025 – août 2026)
+        """
+        if self._date_debut.year == self._date_fin.year:
+            return str(self._date_debut.year)
+        return f"{self._date_debut.year}-{self._date_fin.year}"
+
+    # ── Propriétés dates avec validation ──────────────────────────────────
+
     @property
     def date_debut(self) -> date:
-        """Début de la période de l'exercice (défaut : 1er janvier)."""
+        """Début de la période de l'exercice."""
         return self._date_debut
 
     @date_debut.setter
     def date_debut(self, valeur: date) -> None:
+        """
+        Définit la date de début.
+
+        Contraintes :
+        - Doit appartenir à l'année ``annee`` (identifiant de l'exercice).
+        - Doit être antérieure ou égale à ``date_fin``.
+        """
         if valeur.year != self.annee:
             raise ValueError(
-                f"date_debut {valeur} doit appartenir à l'année {self.annee}."
+                f"date_debut {valeur} doit appartenir à l'année de début "
+                f"de l'exercice ({self.annee}). "
+                f"Pour un exercice démarrant en {valeur.year}, "
+                f"créez Exercice({valeur.year}, ...)."
             )
         if valeur > self._date_fin:
             raise ValueError(
@@ -85,18 +117,30 @@ class Exercice:
 
     @property
     def date_fin(self) -> date:
-        """Fin de la période de l'exercice (défaut : 31 décembre)."""
+        """Fin de la période de l'exercice."""
         return self._date_fin
 
     @date_fin.setter
     def date_fin(self, valeur: date) -> None:
-        if valeur.year != self.annee:
-            raise ValueError(
-                f"date_fin {valeur} doit appartenir à l'année {self.annee}."
-            )
+        """
+        Définit la date de fin.
+
+        Contraintes :
+        - Doit être postérieure ou égale à ``date_debut``.
+        - Peut appartenir à l'année ``annee`` (exercice civique ou partiel)
+          ou à l'année suivante ``annee + 1`` (exercice à cheval).
+        - Ne peut pas dépasser 18 mois après ``date_debut``
+          (garde-fou contre les saisies aberrantes).
+        """
         if valeur < self._date_debut:
             raise ValueError(
                 f"date_fin {valeur} doit être postérieure à date_debut {self._date_debut}."
+            )
+        max_fin = date(self.annee + 1, 12, 31)
+        if valeur > max_fin:
+            raise ValueError(
+                f"date_fin {valeur} ne peut pas dépasser le 31/12/{self.annee + 1}. "
+                f"Un exercice peut s'étendre au maximum sur deux années civiles."
             )
         self._date_fin = valeur
 
@@ -116,7 +160,7 @@ class Exercice:
                 self._date_debut = date.fromisoformat(data["date_debut"])
             if "date_fin" in data:
                 self._date_fin = date.fromisoformat(data["date_fin"])
-            logger.info(f"Exercice {self.annee} : {len(self.transactions)} transactions chargées.")
+            logger.info(f"Exercice {self.libelle} : {len(self.transactions)} transactions chargées.")
 
     def sauvegarder(self) -> None:
         """Persiste toutes les données de l'exercice."""
@@ -132,7 +176,7 @@ class Exercice:
         }
         with open(fichier_tx, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        logger.info(f"Exercice {self.annee} sauvegardé : {len(self.transactions)} transactions.")
+        logger.info(f"Exercice {self.libelle} sauvegardé : {len(self.transactions)} transactions.")
 
     def importer_releve(
         self,

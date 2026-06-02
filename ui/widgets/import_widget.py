@@ -183,7 +183,7 @@ class ImportWidget(QWidget):
         ligne2.addWidget(lbl_fin)
         ligne2.addWidget(self._date_fin)
 
-        lbl_info = QLabel("(Exercice partiel possible — ex : 01/01 au 30/06)")
+        lbl_info = QLabel("(Exercice partiel ou à cheval — ex : 01/09/2025 au 31/08/2026)")
         lbl_info.setStyleSheet("color: #666; font-style: italic; font-size: 11px;")
         lbl_info.setAccessibleName("Information sur la période")
         ligne2.addSpacing(12)
@@ -310,12 +310,13 @@ class ImportWidget(QWidget):
         if date_debut.year != annee:
             erreurs.append(
                 f"La date de début ({date_debut:%d/%m/%Y}) doit appartenir "
-                f"à l'année {annee}."
+                f"à l'année {annee} (année de début de l'exercice)."
             )
-        if date_fin.year != annee:
+        if date_fin > dt_date(annee + 1, 12, 31):
             erreurs.append(
-                f"La date de fin ({date_fin:%d/%m/%Y}) doit appartenir "
-                f"à l'année {annee}."
+                f"La date de fin ({date_fin:%d/%m/%Y}) ne peut pas dépasser "
+                f"le 31/12/{annee + 1}. Un exercice couvre au maximum "
+                f"deux années civiles consécutives."
             )
         if date_debut > date_fin:
             erreurs.append(
