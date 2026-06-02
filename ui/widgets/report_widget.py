@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QDateEdit, QPushButton, QFileDialog, QProgressBar,
     QTextEdit, QRadioButton, QCheckBox, QMessageBox,
-    QSizePolicy, QSplitter, QComboBox, QScrollArea,
+    QSizePolicy, QSplitter, QComboBox, QScrollArea, QLineEdit,
 )
 from PySide6.QtCore import Qt, Signal, QDate, QThread, QObject
 
@@ -241,6 +241,9 @@ class ReportWidget(QWidget):
 
     message_status = Signal(str)
 
+    #: Clé dans config/association.json pour le dossier de sortie des rapports
+    _CLE_DOSSIER = "dossier_rapports"
+
     def __init__(self, config_asso: dict, moteur: MoteurCategorisation,
                  analytique: ComptaAnalytique):
         super().__init__()
@@ -365,6 +368,42 @@ class ReportWidget(QWidget):
         self._lbl_apercu.setAccessibleName("Aperçu textuel du compte de résultat")
         lay_d.addWidget(self._lbl_apercu, stretch=1)
 
+        # ── Dossier de sortie des rapports ────────────────────────────────
+        grp_sortie = QGroupBox("Dossier de sortie des rapports")
+        grp_sortie.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        grp_sortie.setAccessibleDescription(
+            "Choisissez le dossier où les rapports Word et PDF seront enregistrés. "
+            "Ce choix est mémorisé pour les prochaines générations."
+        )
+        lay_sortie = QHBoxLayout(grp_sortie)
+        lay_sortie.setContentsMargins(10, 8, 10, 8)
+        lay_sortie.setSpacing(8)
+
+        self._edit_dossier_sortie = QLineEdit()
+        self._edit_dossier_sortie.setPlaceholderText(
+            "Ex : C:\\Mes documents\\Rapports Culture Musique"
+        )
+        self._edit_dossier_sortie.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._edit_dossier_sortie.setAccessibleName("Dossier de sortie des rapports")
+        self._edit_dossier_sortie.setAccessibleDescription(
+            "Chemin du dossier où seront enregistrés les rapports générés."
+        )
+        # Charger la valeur persistée
+        self._edit_dossier_sortie.setText(
+            self._config.get(self._CLE_DOSSIER, str(Path.home()))
+        )
+        self._edit_dossier_sortie.textChanged.connect(self._on_dossier_sortie_change)
+        lay_sortie.addWidget(self._edit_dossier_sortie, stretch=1)
+
+        btn_parcourir_sortie = QPushButton("&Parcourir…")
+        btn_parcourir_sortie.setFixedWidth(110)
+        configurer_bouton(btn_parcourir_sortie, "Parcourir pour le dossier de sortie",
+                          "Ouvre un sélecteur de dossier pour choisir la destination des rapports.")
+        btn_parcourir_sortie.clicked.connect(self._choisir_dossier_sortie)
+        lay_sortie.addWidget(btn_parcourir_sortie)
+
+        lay_d.addWidget(grp_sortie)
+
         # Options export
         grp_opt = QGroupBox("Export")
         grp_opt.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -420,6 +459,12 @@ class ReportWidget(QWidget):
 
     def set_config(self, config: dict):
         self._config = config
+        # Recharger le dossier de sortie si modifié dans les paramètres
+        nouveau_dossier = config.get(self._CLE_DOSSIER, "")
+        if nouveau_dossier and nouveau_dossier != self._edit_dossier_sortie.text():
+            self._edit_dossier_sortie.blockSignals(True)
+            self._edit_dossier_sortie.setText(nouveau_dossier)
+            self._edit_dossier_sortie.blockSignals(False)
 
     def _get_periode(self):
         if self._radio_annuel.isChecked() and self._exercice:
@@ -503,6 +548,30 @@ class ReportWidget(QWidget):
                 cr.evolution_mensuelle(), cr.solde_initial, cp, cs
             )
 
+    def _choisir_dossier_sortie(self) -> None:
+        """Ouvre un sélecteur de dossier pour la destination des rapports."""
+        dossier_actuel = self._edit_dossier_sortie.text().strip() or str(Path.home())
+        d = QFileDialog.getExistingDirectory(
+            self, "Choisir le dossier de sortie des rapports", dossier_actuel,
+        )
+        if d:
+            self._edit_dossier_sortie.setText(d)
+
+    def _on_dossier_sortie_change(self, texte: str) -> None:
+        """Persiste le dossier de sortie dans config/association.json dès sa modification."""
+        import json
+        chemin_config = Path("config/association.json")
+        if chemin_config.exists():
+            try:
+                with open(chemin_config, encoding="utf-8") as f:
+                    data = json.load(f)
+                data[self._CLE_DOSSIER] = texte.strip()
+                with open(chemin_config, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                self._config[self._CLE_DOSSIER] = texte.strip()
+            except Exception:
+                pass  # Silencieux — ne pas bloquer l'UI pour une erreur de config
+
     def _generer_rapport(self):
         if not self._exercice:
             QMessageBox.warning(self, "Aucun exercice",
@@ -511,15 +580,35 @@ class ReportWidget(QWidget):
         if not self._cr_cache:
             self._calculer()
 
-        nom = (f"Rapport_{self._exercice.annee}.docx"
-               if self._radio_annuel.isChecked()
-               else "Rapport_intermediaire.docx")
-        chemin, _ = QFileDialog.getSaveFileName(
-            self, "Enregistrer le rapport",
-            str(Path.home() / nom), "Documents Word (*.docx)",
-        )
-        if not chemin:
+        # ── Déterminer le dossier de sortie ───────────────────────────────
+        dossier_sortie = self._edit_dossier_sortie.text().strip()
+        if not dossier_sortie or not Path(dossier_sortie).is_dir():
+            # Dossier invalide ou non défini → demander à l'utilisateur
+            QMessageBox.warning(
+                self, "Dossier de sortie invalide",
+                "Le dossier de sortie des rapports est invalide ou inexistant.\n\n"
+                "Veuillez en choisir un valide via le bouton « Parcourir »."
+            )
             return
+
+        # ── Construire le nom de fichier automatiquement ──────────────────
+        from datetime import date as dt_date
+        label = getattr(self._exercice, "libelle", str(self._exercice.annee))
+        suffixe = "annuel" if self._radio_annuel.isChecked() else "intermediaire"
+        today = dt_date.today().strftime("%Y%m%d")
+        nom = f"Rapport_{label}_{suffixe}_{today}.docx"
+        chemin = str(Path(dossier_sortie) / nom)
+
+        # Demander confirmation si le fichier existe déjà
+        if Path(chemin).exists():
+            rep = QMessageBox.question(
+                self, "Fichier existant",
+                f"Le fichier « {nom} » existe déjà dans ce dossier.\n\n"
+                "Voulez-vous le remplacer ?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if rep != QMessageBox.Yes:
+                return
 
         reporter = DocxReporter(self._config, self._moteur)
         self._btn_generer.setEnabled(False)

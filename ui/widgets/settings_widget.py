@@ -122,6 +122,25 @@ class SettingsWidget(QWidget):
         lay_logo.addWidget(btn_logo)
         layout.addWidget(grp_logo)
 
+        # Dossier de sortie des rapports
+        grp_rapports = QGroupBox("Dossier de sortie des rapports")
+        lay_rapports = QHBoxLayout(grp_rapports)
+        self._edit_dossier_rapports = QLineEdit()
+        self._edit_dossier_rapports.setPlaceholderText(
+            "Ex : C:\\Mes documents\\Rapports Culture Musique"
+        )
+        configurer_label_champ(
+            QLabel("Dossier"), self._edit_dossier_rapports,
+            "Dossier de sortie des rapports",
+            "Répertoire où seront enregistrés les rapports Word et PDF générés."
+        )
+        lay_rapports.addWidget(self._edit_dossier_rapports, stretch=1)
+        btn_rapports = QPushButton("&Choisir…")
+        btn_rapports.clicked.connect(self._choisir_dossier_rapports)
+        configurer_bouton(btn_rapports, "Choisir le dossier de sortie des rapports")
+        lay_rapports.addWidget(btn_rapports)
+        layout.addWidget(grp_rapports)
+
         # Couleurs
         grp_couleurs = QGroupBox("Couleurs de l'association")
         lay_coul = QHBoxLayout(grp_couleurs)
@@ -193,6 +212,9 @@ class SettingsWidget(QWidget):
         logo = self._config.get("logo_chemin", "")
         self._edit_logo.setText(logo)
 
+        dossier_rapp = self._config.get("dossier_rapports", "")
+        self._edit_dossier_rapports.setText(dossier_rapp)
+
         # Couleurs des boutons
         for cle, btn in [
             ("couleur_principale", self._btn_couleur_principale),
@@ -201,6 +223,15 @@ class SettingsWidget(QWidget):
             couleur = self._config.get(cle, "#ffffff")
             btn.setStyleSheet(f"background-color: {couleur};")
             self._config.setdefault(cle, couleur)
+
+    def _choisir_dossier_rapports(self) -> None:
+        """Ouvre un sélecteur de dossier pour la destination des rapports."""
+        dossier_actuel = self._edit_dossier_rapports.text().strip() or str(Path.home())
+        d = QFileDialog.getExistingDirectory(
+            self, "Choisir le dossier de sortie des rapports", dossier_actuel,
+        )
+        if d:
+            self._edit_dossier_rapports.setText(d)
 
     def _choisir_logo(self) -> None:
         chemin, _ = QFileDialog.getOpenFileName(
@@ -258,6 +289,7 @@ class SettingsWidget(QWidget):
         for cle, edit in self._champs.items():
             self._config[cle] = edit.text().strip()
         self._config["logo_chemin"] = self._edit_logo.text().strip()
+        self._config["dossier_rapports"] = self._edit_dossier_rapports.text().strip()
 
         chemin = Path(self._chemin_asso)
         chemin.parent.mkdir(parents=True, exist_ok=True)
