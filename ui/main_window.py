@@ -33,8 +33,8 @@ from .widgets.settings_widget import SettingsWidget
 from .widgets.projet_widget import ProjetWidget
 from .accessibility import configurer_bouton
 
-from ..core.categorizer import MoteurCategorisation
-from ..core.accounting import Exercice, ComptaAnalytique
+from core.categorizer import MoteurCategorisation
+from core.accounting import Exercice, ComptaAnalytique
 
 logger = logging.getLogger(__name__)
 

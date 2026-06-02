@@ -34,11 +34,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QDate, QThread, QObject
 
-from ...core.accounting import Exercice, ComptaAnalytique
-from ...core.accounting.compte_resultat import CompteResultat
-from ...core.categorizer import MoteurCategorisation
-from ...core.reporter import DocxReporter, CsvReporter
-from ..accessibility import configurer_bouton, configurer_label_champ
+from core.accounting import Exercice, ComptaAnalytique
+from core.accounting.compte_resultat import CompteResultat
+from core.categorizer import MoteurCategorisation
+from core.reporter import DocxReporter, CsvReporter
+from ui.accessibility import configurer_bouton, configurer_label_champ
 
 logger = logging.getLogger(__name__)
 

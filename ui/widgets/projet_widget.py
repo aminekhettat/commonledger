@@ -10,9 +10,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate
 
-from ...core.accounting import ComptaAnalytique
-from ...core.accounting.analytique import Projet
-from ..accessibility import configurer_bouton, configurer_label_champ
+from core.accounting import ComptaAnalytique
+from core.accounting.analytique import Projet
+from ui.accessibility import configurer_bouton, configurer_label_champ
 
 
 class DialogueProjet(QDialog):

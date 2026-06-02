@@ -17,9 +17,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 
-from ...core.categorizer import MoteurCategorisation
-from ...core.categorizer.rules_engine import Categorie
-from ..accessibility import configurer_label_champ, configurer_bouton
+from core.categorizer import MoteurCategorisation
+from core.categorizer.rules_engine import Categorie
+from ui.accessibility import configurer_label_champ, configurer_bouton
 
 
 class SettingsWidget(QWidget):

@@ -20,10 +20,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QThread, QObject
 
-from ...core.parser import LaPosteParser, ParseError
-from ...core.accounting import Exercice
-from ...core.categorizer import MoteurCategorisation
-from ..accessibility import (
+from core.parser import LaPosteParser, ParseError
+from core.accounting import Exercice
+from core.categorizer import MoteurCategorisation
+from ui.accessibility import (
     configurer_label_champ, configurer_bouton,
     configurer_barre_progression, definir_ordre_tabulation,
 )

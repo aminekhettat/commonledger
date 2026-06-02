@@ -21,10 +21,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 
-from ...core.accounting import Exercice, ComptaAnalytique
-from ...core.categorizer import MoteurCategorisation
-from ...core.parser.models import Transaction, TransactionSplit
-from ..accessibility import (
+from core.accounting import Exercice, ComptaAnalytique
+from core.categorizer import MoteurCategorisation
+from core.parser.models import Transaction, TransactionSplit
+from ui.accessibility import (
     configurer_tableau, configurer_bouton, configurer_label_champ,
     definir_ordre_tabulation,
 )
