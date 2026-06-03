@@ -137,7 +137,7 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=xml:coverage.xml",
     "--cov-report=html:htmlcov",
-    "--cov-fail-under=65",
+    "--cov-fail-under=100",
 ]
 markers = [
     "integration: tests nécessitant des ressources externes (disque E, réseau)",
@@ -168,7 +168,7 @@ exclude_lines = [
     "@abstractmethod",
 ]
 show_missing = true
-fail_under = 65  # seuil réaliste : docx/graphiques sont exclus (intégration)
+fail_under = 100  # couverture obligatoire à 100% — aucune ligne non testée acceptée
 
 # ── Ruff (linter + formatteur) ────────────────────────────────────────────────
 [tool.ruff]
@@ -231,26 +231,42 @@ line-ending = "lf"
 # ── MyPy (vérification de types) ─────────────────────────────────────────────
 [tool.mypy]
 python_version = "3.11"
-strict = false
-warn_return_any = true
-warn_unused_configs = true
-ignore_missing_imports = true
+# ── Mode strict activé sur core/ ─────────────────────────────────────────────
+# mypy vérifie activement les types sur le code métier.
+# Les règles ci-dessous activent les vérifications les plus importantes
+# sans bloquer sur l'absence de stubs pour les bibliothèques tierces.
+strict = false                     # strict global désactivé (active tout sans nuance)
+# Activations explicites des règles critiques :
+warn_return_any = true             # interdit les retours Any implicites
+warn_unused_configs = true         # erreur si un override mypy ne sert à rien
+warn_unused_ignores = true         # interdit les # type: ignore inutiles
+warn_redundant_casts = true        # interdit les cast() superflus
+no_implicit_optional = true        # Optional[X] doit être déclaré explicitement
+check_untyped_defs = true          # vérifie les fonctions sans annotations
+disallow_any_generics = true       # interdit List, Dict sans paramètres de type
+disallow_untyped_defs = true       # toute fonction de core/ doit être annotée
+disallow_incomplete_defs = true    # pas d'annotations partielles
+disallow_untyped_calls = false     # autorise les appels vers du code non annoté (PySide6)
+ignore_missing_imports = true      # stubs absents pour pdfplumber/matplotlib/etc.
+show_error_codes = true            # affiche les codes d'erreur pour les ignores ciblés
 exclude = [
-    "tests/",
-    "ui/",
+    "tests/",       # les tests n'ont pas besoin d'annotations complètes
+    "ui/",          # PySide6 génère trop de faux positifs (slots, signals, etc.)
     "config/",
     "docs/",
+    "scripts/",
 ]
 
 [[tool.mypy.overrides]]
-module = ["matplotlib.*", "PIL.*", "pdfplumber.*", "fitz.*", "docx.*", "comtypes.*"]
+module = ["matplotlib.*", "PIL.*", "pdfplumber.*", "fitz.*", "docx.*", "comtypes.*",
+          "PySide6.*", "openpyxl.*", "dateutil.*"]
 ignore_missing_imports = true
 
-# python-docx n'a pas de stubs complets — les erreurs attr-defined sont
-# des faux positifs dus à l'absence de stubs, pas des bugs réels
+# python-docx : stubs incomplets, les attr-defined sont des faux positifs
+# On désactive uniquement attr-defined sur ce module, pas toutes les erreurs
 [[tool.mypy.overrides]]
 module = ["core.reporter.docx_reporter"]
-ignore_errors = true
+disable_error_code = ["attr-defined", "no-any-return"]
 
 # ── Bandit (sécurité) ─────────────────────────────────────────────────────────
 # ── pdoc (génération de documentation API) ────────────────────────────────────
@@ -263,9 +279,14 @@ ignore_errors = true
 docformat = "google"
 
 [tool.bandit]
-exclude_dirs = ["tests", "ui", "config/assets"]
-skips = ["B101", "B603", "B607"]  # assert, subprocess, shell=True autorisés
-severity = "medium"
+exclude_dirs = ["tests", "ui", "config/assets", "scripts", "docs"]
+# B101 : assert — justifié uniquement dans les tests (exclus ci-dessus)
+# B324 : hashlib sans usedforsecurity=False → interdit sauf si explicitement justifié
+# B603/B607 : subprocess avec liste de commandes hardcodées → autorisé dans scripts/
+# Tous les autres problèmes de sécurité doivent lever une erreur
+skips = []
+severity = "low"     # tout problème même mineur doit être signalé
+confidence = "low"   # signaler même les détections incertaines
 
 # ── semantic-release (versioning automatique) ─────────────────────────────────
 [tool.semantic_release]

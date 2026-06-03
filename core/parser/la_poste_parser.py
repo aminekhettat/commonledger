@@ -1,4 +1,4 @@
-"""
+﻿"""
 Parseur pour les relevés de compte La Banque Postale (CCP).
 
 Ce module gère l'extraction des transactions depuis les fichiers PDF
@@ -204,40 +204,90 @@ class LaPosteParser:
                 return candidat
         return ""  # pragma: no cover
 
-    def verifier_appartenance(self, chemin_pdf: str) -> bool:
+    @staticmethod
+    def _normaliser_nom(texte: str) -> str:
+        """Normalise un nom pour la comparaison (sans accents, majuscules, espaces réduits)."""
+        import unicodedata
+        nfd = unicodedata.normalize("NFD", texte)
+        sans_accent = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+        return " ".join(sans_accent.upper().split())
+
+    def _valider_releve(self, releve: ReleveInfo) -> None:
         """
-        Vérifie que le PDF appartient bien à l'association.
+        Valide le relevé extrait contre la configuration de l'association.
 
-        Contrôle la présence du numéro de compte ou de l'IBAN
-        dans les premières pages du document.
+        Vérifie dans l'ordre :
+        1. Nom de l'association (correspondance partielle, insensible à la casse et aux accents)
+        2. IBAN (correspondance stricte, sans espaces)
+        3. BIC (correspondance stricte)
+        4. Numéro de compte (correspondance stricte)
 
-        Args:
-            chemin_pdf: Chemin vers le fichier PDF.
-
-        Returns:
-            True si le fichier est reconnu.
+        Les raisons de rejet sont stockées dans releve.raisons_rejet.
+        releve.valide est True uniquement si aucune règle configurée n'est violée.
+        Si un champ n'est pas configuré (chaîne vide), la vérification est ignorée.
         """
-        try:
-            with pdfplumber.open(chemin_pdf) as pdf:
-                # Vérifier sur les 2 premières pages max
-                for page in pdf.pages[:2]:
-                    texte = (page.extract_text() or "").upper().replace(" ", "").replace(" ", "")
-                    # Chercher le numéro de compte (ex: 6804150W020)
-                    if self.numero_compte and self.numero_compte.upper() in texte:
-                        return True
-                    # Chercher l'IBAN (sans espaces)
-                    if self.iban and self.iban in texte:
-                        return True  # pragma: no cover
-                    # Chercher le nom de l'association (premiers 20 chars)
-                    if self.nom_association:
-                        nom_court = self.nom_association.upper().replace(" ", "")[:15]
-                        if nom_court and nom_court in texte:
-                            return True
-            # Si aucun marqueur configuré, accepter par défaut
-            return not self.numero_compte and not self.iban
-        except Exception as e:
-            logger.warning(f"Impossible de vérifier {chemin_pdf}: {e}")
-            return False
+        raisons: list[str] = []
+
+        # 1. Nom de l'association
+        if self.nom_association and releve.nom_asso_pdf:
+            nom_conf = self._normaliser_nom(self.nom_association)
+            nom_pdf = self._normaliser_nom(releve.nom_asso_pdf)
+            if nom_conf not in nom_pdf and nom_pdf not in nom_conf:
+                raisons.append(
+                    f"Nom de la structure : config='{self.nom_association}' "
+                    f"!= PDF='{releve.nom_asso_pdf}'"
+                )
+        elif self.nom_association and not releve.nom_asso_pdf:
+            logger.info(
+                f"{Path(releve.fichier).name} : nom non extrait du PDF, "
+                "verification du nom ignoree"
+            )
+
+        # 2. IBAN
+        if self.iban:
+            iban_conf = self.iban.replace(" ", "").upper()
+            iban_pdf = releve.iban_pdf.replace(" ", "").upper()
+            if iban_pdf and iban_conf != iban_pdf:
+                raisons.append(
+                    f"IBAN : config='{self.iban}' != PDF='{releve.iban_pdf}'"
+                )
+            elif not iban_pdf:
+                logger.info(
+                    f"{Path(releve.fichier).name} : IBAN non extrait du PDF, "
+                    "verification IBAN ignoree"
+                )
+
+        # 3. BIC
+        if self.bic:
+            bic_conf = self.bic.replace(" ", "").upper()
+            bic_pdf = releve.bic_pdf.replace(" ", "").upper()
+            if bic_pdf and bic_conf != bic_pdf:
+                raisons.append(
+                    f"BIC : config='{self.bic}' != PDF='{releve.bic_pdf}'"
+                )
+            elif not bic_pdf:
+                logger.info(
+                    f"{Path(releve.fichier).name} : BIC non extrait du PDF, "
+                    "verification BIC ignoree"
+                )
+
+        # 4. Numéro de compte
+        if self.numero_compte and releve.numero_compte:
+            nc_conf = self.numero_compte.replace(" ", "").upper()
+            nc_pdf = releve.numero_compte.replace(" ", "").upper()
+            if nc_conf != nc_pdf:
+                raisons.append(
+                    f"Numero de compte : config='{self.numero_compte}' "
+                    f"!= PDF='{releve.numero_compte}'"
+                )
+
+        releve.raisons_rejet = raisons
+        releve.valide = len(raisons) == 0
+
+        if raisons:
+            logger.warning(
+                f"{Path(releve.fichier).name} rejete : " + " | ".join(raisons)
+            )
 
     def parser_fichier(self, chemin_pdf: str) -> ReleveInfo:
         """
@@ -258,10 +308,6 @@ class LaPosteParser:
             raise FileNotFoundError(f"Fichier introuvable : {chemin_pdf}")
 
         releve = ReleveInfo(fichier=str(chemin))
-        releve.valide = self.verifier_appartenance(chemin_pdf)
-
-        if not releve.valide:
-            logger.warning(f"Fichier non reconnu comme relevé de l'association : {chemin.name}")
 
         # Déduire l'année depuis le nom de fichier (ex: releve_6804150W020_2024-01-31.pdf)
         annee_fichier = self._annee_depuis_nom(chemin.name)
@@ -287,6 +333,9 @@ class LaPosteParser:
 
                 # Extraire les soldes depuis le texte complet
                 self._extraire_soldes(texte_complet, releve)
+
+                # Valider le relevé contre la configuration de l'association
+                self._valider_releve(releve)
 
                 # Convertir en objets Transaction
                 releve.transactions = self._construire_transactions(toutes_lignes, chemin.name)
@@ -436,6 +485,45 @@ class LaPosteParser:
         if fin:
             releve.periode_fin = fin
 
+        # IBAN et BIC — ligne format : "IBAN : FR94 2004 1000 0168 0415 0W02 084 | BIC : PSST..."
+        # L'IBAN La Banque Postale contient des lettres (ex : 0W02) — le regex
+        # doit accepter des groupes alphanumériques, pas seulement numériques.
+        m_iban = re.search(
+            r"IBAN\s*:\s*([A-Z]{2}\d{2}(?:\s*[A-Z0-9]{4})*\s*[A-Z0-9]{1,4})",
+            texte, re.IGNORECASE
+        )
+        if m_iban:
+            releve.iban_pdf = m_iban.group(1).replace(" ", "").upper()
+
+        m_bic = re.search(r"BIC\s*:\s*([A-Z0-9]{8,11})", texte, re.IGNORECASE)
+        if m_bic:
+            releve.bic_pdf = m_bic.group(1).strip().upper()
+
+        # Nom de l'association — apparaît sur la même ligne que l'adresse du centre
+        # financier ou sur une ligne dédiée après l'adresse. Chercher sur les lignes
+        # qui contiennent des mots-clés d'association.
+        # Exemples observés :
+        #   "75900 PARIS CEDEX 15 ASSO CULTURE MUSIQUE"
+        #   "ASSO CULTURE MUSIQUE"
+        #   "ASSOCIATION DES..."
+        for ligne in texte.split("\n"):
+            ligne_norm = _normaliser_pdf_texte(ligne).upper()
+            # Chercher le numéro de compte dans la ligne pour exclure les lignes sans rapport
+            # Le nom apparaît souvent sur la même ligne que le code postal/ville
+            # Le nom de la structure suit le code postal + ville/cedex (peut
+            # inclure des chiffres : "75900 PARIS CEDEX 15 ASSO CULTURE MUSIQUE")
+            m_nom = re.search(
+                r"\d{5}\b.+?((?:ASSO|ASSOCIATION|UNION|LIGUE|FEDERATION|CLUB|COMITE|GROUPE)[A-Z\s]{3,60})",
+                ligne_norm,
+            )
+            if m_nom:
+                releve.nom_asso_pdf = m_nom.group(1).strip()
+                break
+            # Format alternatif : ligne commençant directement par le nom
+            if re.match(r"^(?:ASSO|ASSOCIATION|UNION|LIGUE|FEDERATION|CLUB|COMITE|GROUPE)\b", ligne_norm):
+                releve.nom_asso_pdf = ligne_norm.strip()
+                break
+
     def _extraire_soldes(self, texte: str, releve: ReleveInfo) -> None:
         """
         Extrait les soldes d'ouverture et de clôture.
@@ -466,6 +554,15 @@ class LaPosteParser:
                 if m2:
                     releve.solde_debut = _parse_montant(m2.group(1))
                     break
+
+        # Format 2013-2018 : "Solde au DD/MM/YYYY    X XXX,XX" (sans le mot "Ancien")
+        if releve.solde_debut is None:
+            m_solde = re.search(
+                r"(?<![a-zA-Z])solde\s+au\s+\d{2}/\d{2}/\d{4}\s+([\d\s\xa0]+,\d{2})",
+                texte, re.IGNORECASE,
+            )
+            if m_solde:
+                releve.solde_debut = _parse_montant(m_solde.group(1))
 
     # ── Extraction des transactions ────────────────────────────────────────────
 

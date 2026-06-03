@@ -19,12 +19,19 @@ import pytest
 
 @pytest.fixture(scope="session")
 def config_asso() -> dict:
-    """Configuration minimale d'association pour les tests."""
+    """
+    Configuration minimale d'association pour les tests.
+
+    Les valeurs IBAN/BIC/num_compte doivent correspondre à celles présentes
+    dans les PDFs mockés (RELEVE_JANVIER_2024, etc.) pour que la validation
+    _valider_releve() passe. L'IBAN utilisé dans les fixtures mock est :
+    'FR94 2004 1000 0168 0415 0W02 084' → normalisé : 'FR942004100001680415W02084'.
+    """
     return {
-        "nom": "Association Test",
-        "sigle": "AT",
+        "nom": "Culture Musique",  # "ASSO CULTURE MUSIQUE" contient "CULTURE MUSIQUE"
+        "sigle": "ACM",
         "type_structure": "Association loi 1901",
-        "iban": "FR7620041000016804150W02084",
+        "iban": "FR94 2004 1000 0168 0415 0W02 084",  # normalisé: FR9420041000016804150W02084
         "bic": "PSSTFRPPPAR",
         "numero_compte": "6804150W020",
         "banque": "La Banque Postale",

@@ -387,23 +387,17 @@ class TestParserBranchesNonCouvertes:
         p = LaPosteParser(config)
         assert p.numero_compte == ""  # L205
 
-    def test_verifier_appartenance_par_nom_association(self):
-        """L230, L235 — verifier_appartenance via nom_association."""
+    def test_valider_releve_numero_compte_mismatch(self):
+        """_valider_releve rejette si num_compte config != PDF."""
         from core.parser.la_poste_parser import LaPosteParser
-        config = {"iban": "", "bic": "", "numero_compte": "",
-                  "nom": "ASSO TEST UNIQUE 12345"}
+        from core.parser.models import ReleveInfo
+        config = {"iban": "", "bic": "", "numero_compte": "6804150W020", "nom": ""}
         p = LaPosteParser(config)
-        texte = "COMPTE DE ASSO TEST UNIQUE 12345 CLIENT PARIS"
-        from unittest.mock import patch as upatch, MagicMock
-        fake_page = MagicMock()
-        fake_page.extract_text.return_value = texte
-        fake_pdf = MagicMock()
-        fake_pdf.pages = [fake_page]
-        fake_pdf.__enter__ = lambda s: s
-        fake_pdf.__exit__ = MagicMock(return_value=False)
-        with upatch("pdfplumber.open", return_value=fake_pdf):
-            result = p.verifier_appartenance("fake.pdf")
-        assert result is True  # L230 ou L235
+        r = ReleveInfo(fichier="test.pdf")
+        r.numero_compte = "9999999X999"  # différent de la config
+        p._valider_releve(r)
+        assert r.valide is False
+        assert any("compte" in raison.lower() for raison in r.raisons_rejet)
 
     def test_parser_fichier_leve_parse_error(self, parser, tmp_path):
         """L294-297 — exception générale → ParseError."""

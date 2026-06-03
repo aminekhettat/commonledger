@@ -181,14 +181,18 @@ class ReleveInfo:
     Métadonnées extraites d'un relevé bancaire.
 
     Attributes:
-        fichier:         Chemin vers le fichier PDF source.
-        periode_debut:   Premier jour de la période couverte.
-        periode_fin:     Dernier jour de la période couverte.
-        solde_debut:     Solde en début de période.
-        solde_fin:       Solde en fin de période.
-        numero_compte:   Numéro de compte bancaire.
-        transactions:    Liste des transactions extraites.
-        valide:          True si le fichier a passé la vérification d'appartenance.
+        fichier:          Chemin vers le fichier PDF source.
+        periode_debut:    Premier jour de la période couverte par ce relevé.
+        periode_fin:      Dernier jour de la période couverte par ce relevé.
+        solde_debut:      Solde d'ouverture (« Ancien solde »).
+        solde_fin:        Solde de clôture (« Nouveau solde »).
+        numero_compte:    Numéro de compte bancaire court (ex : 6804150W020).
+        iban_pdf:         IBAN tel qu'il apparaît dans le PDF (normalisé sans espaces).
+        bic_pdf:          BIC tel qu'il apparaît dans le PDF.
+        nom_asso_pdf:     Nom de la structure tel qu'il apparaît dans le PDF.
+        transactions:     Liste des transactions extraites.
+        valide:           True si le relevé a passé toutes les validations.
+        raisons_rejet:    Liste des motifs de rejet (si valide=False).
     """
 
     fichier: str
@@ -197,5 +201,9 @@ class ReleveInfo:
     solde_debut: Decimal | None = None
     solde_fin: Decimal | None = None
     numero_compte: str = ""
+    iban_pdf: str = ""
+    bic_pdf: str = ""
+    nom_asso_pdf: str = ""
     transactions: list[Transaction] = field(default_factory=list)
     valide: bool = False
+    raisons_rejet: list[str] = field(default_factory=list)

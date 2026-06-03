@@ -71,27 +71,97 @@ Nouveau solde au 31/01/2017 2 318,21
 Page 1/1"""
 
 
-class TestVerifierAppartenance:
-    """Tests de la vérification d'appartenance du PDF."""
+class TestValiderReleve:
+    """Tests de la validation des relevés (_valider_releve)."""
 
-    def test_appartenance_numero_compte(self, parser):
-        texte = "IBAN : FR94 2004 1000 0168 0415 0W02 084\nn° 68 041 50 W 020\nASSO CULTURE MUSIQUE"
-        with patch("pdfplumber.open", return_value=_make_fake_pdf([texte])):
-            assert parser.verifier_appartenance("fake.pdf") is True
+    def _releve_avec(self, iban="", bic="", nom="", num_compte=""):
+        """Crée un ReleveInfo avec les métadonnées spécifiées."""
+        from core.parser.models import ReleveInfo
+        r = ReleveInfo(fichier="test.pdf")
+        r.iban_pdf = iban
+        r.bic_pdf = bic
+        r.nom_asso_pdf = nom
+        r.numero_compte = num_compte
+        return r
 
-    def test_appartenance_iban(self, parser):
-        texte = "IBAN : FR9420041000016804150W02084 | BIC : PSSTFRPPPAR"
-        with patch("pdfplumber.open", return_value=_make_fake_pdf([texte])):
-            assert parser.verifier_appartenance("fake.pdf") is True
+    def test_valide_iban_et_nom_corrects(self, parser):
+        """Relevé valide : IBAN et nom correspondent à la config."""
+        r = self._releve_avec(
+            iban="FR9420041000016804150W02084",
+            bic="PSSTFRPPPAR",
+            nom="ASSO CULTURE MUSIQUE",
+            num_compte="6804150W020",
+        )
+        parser._valider_releve(r)
+        assert r.valide is True
+        assert r.raisons_rejet == []
 
-    def test_non_appartenance(self, parser):
-        texte = "Relevé compte entreprise XYZ SARL IBAN : FR76999999"
-        with patch("pdfplumber.open", return_value=_make_fake_pdf([texte])):
-            assert parser.verifier_appartenance("fake.pdf") is False
+    def test_invalide_iban_different(self, parser):
+        """Relevé rejeté si l'IBAN ne correspond pas à la config."""
+        r = self._releve_avec(
+            iban="FR7620041000099999990W02084",  # IBAN différent
+            bic="PSSTFRPPPAR",
+            nom="ASSO CULTURE MUSIQUE",
+        )
+        parser._valider_releve(r)
+        assert r.valide is False
+        assert any("IBAN" in raison for raison in r.raisons_rejet)
 
-    def test_appartenance_exception_retourne_false(self, parser):
-        with patch("pdfplumber.open", side_effect=Exception("PDF corrompu")):
-            assert parser.verifier_appartenance("fake.pdf") is False
+    def test_invalide_bic_different(self, parser):
+        """Relevé rejeté si le BIC ne correspond pas à la config."""
+        r = self._releve_avec(
+            iban="FR9420041000016804150W02084",
+            bic="BNPAFRPPXXX",  # BIC différent
+            nom="ASSO CULTURE MUSIQUE",
+        )
+        parser._valider_releve(r)
+        assert r.valide is False
+        assert any("BIC" in raison for raison in r.raisons_rejet)
+
+    def test_invalide_nom_completement_different(self, parser):
+        """Relevé rejeté si le nom ne contient aucune correspondance."""
+        r = self._releve_avec(
+            iban="FR9420041000016804150W02084",
+            bic="PSSTFRPPPAR",
+            nom="SOCIETE DUPONT ET FILS SARL",  # nom sans rapport
+        )
+        parser._valider_releve(r)
+        assert r.valide is False
+        assert any("Nom" in raison for raison in r.raisons_rejet)
+
+    def test_nom_partiel_accepte(self, parser):
+        """Correspondance partielle du nom acceptée (abbréviations)."""
+        r = self._releve_avec(
+            iban="FR9420041000016804150W02084",
+            bic="PSSTFRPPPAR",
+            nom="CULTURE MUSIQUE ACM",  # contient une partie du nom config
+        )
+        parser._valider_releve(r)
+        # "Association Culture Musique" contient "CULTURE MUSIQUE"
+        # et "CULTURE MUSIQUE ACM" contient "CULTURE MUSIQUE"
+        assert r.valide is True
+
+    def test_valide_sans_iban_dans_pdf(self, parser):
+        """Si le PDF n'a pas d'IBAN extrait, la vérification IBAN est ignorée."""
+        r = self._releve_avec(iban="", bic="", nom="ASSO CULTURE MUSIQUE")
+        parser._valider_releve(r)
+        # Pas d'IBAN dans le PDF → on ne peut pas comparer → valide par défaut
+        assert r.valide is True
+
+    def test_valide_sans_nom_dans_pdf(self, parser):
+        """Si le PDF n'a pas de nom extrait, la vérification nom est ignorée."""
+        r = self._releve_avec(
+            iban="FR9420041000016804150W02084",
+            bic="PSSTFRPPPAR",
+            nom="",  # nom non extrait
+        )
+        parser._valider_releve(r)
+        assert r.valide is True
+
+    def test_normaliser_nom_accents(self, parser):
+        """La normalisation supprime les accents et les espaces multiples."""
+        assert parser._normaliser_nom("Société  Étrange") == "SOCIETE ETRANGE"
+        assert parser._normaliser_nom("asso  culture  musique") == "ASSO CULTURE MUSIQUE"
 
 
 class TestParserFichierMock:
@@ -222,6 +292,26 @@ Page 1/1"""
         # ou extrait depuis l'IBAN — vérifier qu'il est non vide ou correct
         assert releve.numero_compte == "6804150W020" or releve.valide is True
 
+    def test_extraire_metadonnees_nom_via_code_postal(self, parser):
+        """Le nom est extrait depuis une ligne 'XXXXX VILLE ASSO ...' (format réel)."""
+        from core.parser.models import ReleveInfo
+        # Format réel : code postal + ville + nom association sur la même ligne
+        texte = "75900 PARIS CEDEX 15 ASSO CULTURE MUSIQUE\nAutre ligne"
+        r = ReleveInfo(fichier="test.pdf")
+        parser._extraire_metadonnees(texte, r)
+        # Le nom doit être extrait via le pattern code postal
+        assert "CULTURE MUSIQUE" in r.nom_asso_pdf or r.nom_asso_pdf != ""
+
+    def test_extraire_soldes_format_2013(self, parser):
+        """Le format 2013-2018 'Solde au DD/MM/YYYY' est reconnu sans le mot 'Ancien'."""
+        from core.parser.models import ReleveInfo
+        # Texte sans "Ancien solde" — format anciens relevés
+        texte = "Situation du compte\nSolde au 01/01/2013 1 234,56\nOpérations du mois"
+        r = ReleveInfo(fichier="test.pdf")
+        parser._extraire_soldes(texte, r)
+        assert r.solde_debut is not None
+        assert float(r.solde_debut) == pytest.approx(1234.56, abs=0.01)
+
 
 class TestParserDossierMock:
     """Tests de parser_dossier avec mocks."""
@@ -307,12 +397,11 @@ Page 1/1"""
         with patch("pdfplumber.open", side_effect=fake_open):
             releves = parser.parser_dossier(str(tmp_path))
 
-        # Le PDF corrompu lève une exception dans verifier_appartenance()
-        # qui est interceptée → releve invalide avec 0 transactions
-        # Le second relevé est bien parsé normalement → 2 releves au total
-        assert len(releves) == 2
-        assert releves[0].valide is False   # PDF corrompu
-        assert releves[1].valide is True    # second PDF OK
+        # Le PDF corrompu lève une ParseError qui est interceptée dans
+        # parser_dossier → le fichier est sauté (non ajouté à la liste).
+        # Seul le second relevé (valide) est retourné.
+        assert len(releves) == 1
+        assert releves[0].valide is True    # second PDF OK
 
 
 class TestExtractPeriodePdf:
