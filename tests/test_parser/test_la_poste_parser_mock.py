@@ -527,3 +527,35 @@ class TestExtraireSoldesMock:
         releve.solde_fin = None
         parser._extraire_soldes(texte, releve)
         assert releve.solde_debut == Decimal("4424.17")
+
+
+class TestEstLigneIgnoree:
+    """Tests ciblés des règles de filtrage de _est_ligne_ignoree."""
+
+    def test_numero_page_seul_ignore(self, parser):
+        """Une ligne contenant uniquement un numéro de page est ignorée."""
+        # ex : "4" ou "12" — numéros de page La Banque Postale
+        assert parser._est_ligne_ignoree("4") is True
+        assert parser._est_ligne_ignoree("12") is True
+        assert parser._est_ligne_ignoree("  4  ") is True  # avec espaces
+
+    def test_note_de_bas_de_page_ignoree(self, parser):
+        """Un chiffre collé à une lettre (note de bas de page) est ignoré."""
+        # ex : "4Fraisetcotisationsperçusouremboursés."
+        assert parser._est_ligne_ignoree("4Fraisetcotisations") is True
+        assert parser._est_ligne_ignoree("2Mention") is True
+
+    def test_reference_avec_espace_non_ignoree(self, parser):
+        """Un chiffre suivi d'une espace puis d'un texte n'est PAS ignoré."""
+        # ex : "6121209 Billetterie Weezevent JUIN 2"
+        assert parser._est_ligne_ignoree("6121209 Billetterie Weezevent") is False
+
+    def test_mots_cles_classiques_ignores(self, parser):
+        """Les mots-clés classiques (total, page, etc.) sont ignorés."""
+        assert parser._est_ligne_ignoree("TOTAL DES OPERATIONS") is True
+        assert parser._est_ligne_ignoree("Page 1/2") is True
+        assert parser._est_ligne_ignoree("LA BANQUE POSTALE") is True
+
+    def test_ligne_vide_ignoree(self, parser):
+        """Une ligne vide est ignorée."""
+        assert parser._est_ligne_ignoree("") is False  # vide → appel inutile mais safe
