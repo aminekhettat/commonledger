@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.7.5 (2026-06-03)
+
+### Bug Fixes
+
+- Resolve ruff ANN401, skip Windows-only test on Linux, add requirements-dev.txt
+  ([`ac6df55`](https://github.com/aminekhettat/commonledger/commit/ac6df5572f31e6733c638bd5d051faaf893b83bb))
+
+ANN401: use real types instead of Any:
+
+- analytique.py: moteur -> MoteurCategorisation (TYPE_CHECKING import)
+
+- analytique.py: **kwargs -> **kwargs: object (explicit base type)
+
+- bilan.py: compte_resultat -> CompteResultat (TYPE_CHECKING import)
+
+pytest: test_convertir_en_pdf_word_com_succes now skipped on non-Windows
+
+(Word COM is unavailable on Linux CI runners)
+
+docs: requirements-dev.txt force-added (was gitignored)
+
+
 ## v0.7.4 (2026-06-03)
 
 ### Bug Fixes
@@ -37,6 +59,11 @@ disabling of rules. Specific changes:
 targeted disable_error_code (not ignore_errors=true)
 
 mypy: 0 errors in 16 files. 343 tests. 100% coverage.
+
+### Chores
+
+- **release**: V0.7.4 [skip ci]
+  ([`52e09bd`](https://github.com/aminekhettat/commonledger/commit/52e09bdbac68a0e4d0f59f2f34dd855c8eff165b))
 
 
 ## v0.7.3 (2026-06-03)
