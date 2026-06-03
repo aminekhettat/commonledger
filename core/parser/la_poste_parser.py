@@ -1,4 +1,4 @@
-﻿"""
+"""
 Parseur pour les relevés de compte La Banque Postale (CCP).
 
 Ce module gère l'extraction des transactions depuis les fichiers PDF
@@ -221,13 +221,16 @@ class LaPosteParser:
         et la recherche trouvera "ASSO CULTURE MUSIQUE" dans le PDF (substring).
         """
         import unicodedata
+
         nfd = unicodedata.normalize("NFD", texte)
         sans_accent = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
         # Artefacts d'encodage spécifiques aux PDFs LBP
         sans_accent = (
-            sans_accent
-            .replace("ø", "e").replace("Ø", "e")
-            .replace("ß", "u").replace("œ", "oe").replace("Œ", "oe")
+            sans_accent.replace("ø", "e")
+            .replace("Ø", "e")
+            .replace("ß", "u")
+            .replace("œ", "oe")
+            .replace("Œ", "oe")
         )
         return " ".join(sans_accent.lower().split())
 
@@ -236,6 +239,7 @@ class LaPosteParser:
     def _normaliser_nom(texte: str) -> str:
         """Normalise un nom (sans accents, majuscules, espaces réduits)."""
         import unicodedata
+
         nfd = unicodedata.normalize("NFD", texte)
         sans_accent = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
         return " ".join(sans_accent.upper().split())
@@ -269,13 +273,11 @@ class LaPosteParser:
             texte_norm = self._normaliser_pour_recherche(texte_pdf)
             if nom_conf not in texte_norm:
                 raisons.append(
-                    f"Nom de la structure : '{self.nom_association}' "
-                    f"introuvable dans le PDF"
+                    f"Nom de la structure : '{self.nom_association}' introuvable dans le PDF"
                 )
         elif self.nom_association and not texte_pdf:
             logger.info(
-                f"{Path(releve.fichier).name} : texte PDF absent, "
-                "verification du nom ignoree"
+                f"{Path(releve.fichier).name} : texte PDF absent, verification du nom ignoree"
             )
 
         # 2. IBAN
@@ -283,9 +285,7 @@ class LaPosteParser:
             iban_conf = self.iban.replace(" ", "").upper()
             iban_pdf = releve.iban_pdf.replace(" ", "").upper()
             if iban_pdf and iban_conf != iban_pdf:
-                raisons.append(
-                    f"IBAN : config='{self.iban}' != PDF='{releve.iban_pdf}'"
-                )
+                raisons.append(f"IBAN : config='{self.iban}' != PDF='{releve.iban_pdf}'")
             elif not iban_pdf:
                 logger.info(
                     f"{Path(releve.fichier).name} : IBAN non extrait du PDF, "
@@ -297,9 +297,7 @@ class LaPosteParser:
             bic_conf = self.bic.replace(" ", "").upper()
             bic_pdf = releve.bic_pdf.replace(" ", "").upper()
             if bic_pdf and bic_conf != bic_pdf:
-                raisons.append(
-                    f"BIC : config='{self.bic}' != PDF='{releve.bic_pdf}'"
-                )
+                raisons.append(f"BIC : config='{self.bic}' != PDF='{releve.bic_pdf}'")
             elif not bic_pdf:
                 logger.info(
                     f"{Path(releve.fichier).name} : BIC non extrait du PDF, "
@@ -320,9 +318,7 @@ class LaPosteParser:
         releve.valide = len(raisons) == 0
 
         if raisons:
-            logger.warning(
-                f"{Path(releve.fichier).name} rejete : " + " | ".join(raisons)
-            )
+            logger.warning(f"{Path(releve.fichier).name} rejete : " + " | ".join(raisons))
 
     def parser_fichier(self, chemin_pdf: str) -> ReleveInfo:
         """
@@ -524,8 +520,7 @@ class LaPosteParser:
         # L'IBAN La Banque Postale contient des lettres (ex : 0W02) — le regex
         # doit accepter des groupes alphanumériques, pas seulement numériques.
         m_iban = re.search(
-            r"IBAN\s*:\s*([A-Z]{2}\d{2}(?:\s*[A-Z0-9]{4})*\s*[A-Z0-9]{1,4})",
-            texte, re.IGNORECASE
+            r"IBAN\s*:\s*([A-Z]{2}\d{2}(?:\s*[A-Z0-9]{4})*\s*[A-Z0-9]{1,4})", texte, re.IGNORECASE
         )
         if m_iban:
             releve.iban_pdf = m_iban.group(1).replace(" ", "").upper()
@@ -611,7 +606,8 @@ class LaPosteParser:
         if releve.solde_debut is None:
             m_solde = re.search(
                 r"(?<![a-zA-Z])solde\s+au\s+\d{2}/\d{2}/\d{4}\s+([\d\s\xa0]+,\d{2})",
-                texte, re.IGNORECASE,
+                texte,
+                re.IGNORECASE,
             )
             if m_solde:
                 releve.solde_debut = _parse_montant(m_solde.group(1))

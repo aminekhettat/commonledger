@@ -341,7 +341,9 @@ class GestionnaireBilan:
 
     def dotation_annuelle(self) -> Decimal:
         """Dotation totale aux amortissements de l'exercice."""
-        return Decimal(sum(i.calculer_amortissement_annuel() for i in self.immobilisations if i.actif))
+        return Decimal(
+            sum(i.calculer_amortissement_annuel() for i in self.immobilisations if i.actif)
+        )
 
     def immobilisations_nettes(self, date_cloture: date | None = None) -> Decimal:
         """Valeur nette comptable totale des immobilisations."""

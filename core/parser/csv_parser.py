@@ -41,13 +41,11 @@ Utilisation::
 from __future__ import annotations
 
 import csv
-import hashlib
 import logging
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Optional
 
 from .models import ParseError, ReleveInfo, Transaction
 
@@ -60,7 +58,7 @@ _ENCODAGES_CSV = ["utf-8-sig", "utf-8", "iso-8859-1", "cp1252"]
 _HEADER_COLONNES = {"date", "libelle", "libellé", "montant"}
 
 
-def _parse_montant_csv(texte: str) -> Optional[Decimal]:
+def _parse_montant_csv(texte: str) -> Decimal | None:
     """
     Convertit un montant au format La Banque Postale en Decimal.
 
@@ -79,12 +77,7 @@ def _parse_montant_csv(texte: str) -> Optional[Decimal]:
     if not texte or not texte.strip():
         return None
     # Supprimer €, espaces insécables et normaux, tabulations
-    nettoyé = (texte
-               .replace("\xa0", "")
-               .replace(" ", "")
-               .replace("€", "")
-               .replace("\t", "")
-               .strip())
+    nettoyé = texte.replace("\xa0", "").replace(" ", "").replace("€", "").replace("\t", "").strip()
     # Remplacer la virgule décimale par un point
     nettoyé = nettoyé.replace(",", ".")
     try:
@@ -93,7 +86,7 @@ def _parse_montant_csv(texte: str) -> Optional[Decimal]:
         return None
 
 
-def _parse_date_csv(texte: str) -> Optional[date]:
+def _parse_date_csv(texte: str) -> date | None:
     """
     Parse une date au format DD/MM/YYYY (standard CSV La Banque Postale).
 
@@ -112,7 +105,7 @@ def _parse_date_csv(texte: str) -> Optional[date]:
     return None
 
 
-def _extraire_date_depuis_chaine(chaine: str) -> Optional[date]:
+def _extraire_date_depuis_chaine(chaine: str) -> date | None:
     """Extrait une date DD/MM/YYYY depuis une chaîne quelconque."""
     m = re.search(r"(\d{2}/\d{2}/\d{4})", chaine)
     if m:
@@ -169,7 +162,7 @@ class CSVParserLaBanquePostale:
         """
         if not ligne:
             return False
-        cellules_norm = {c.lower().strip().replace("\xE9", "e") for c in ligne if c.strip()}
+        cellules_norm = {c.lower().strip().replace("\xe9", "e") for c in ligne if c.strip()}
         return bool(cellules_norm & {"date"}) and bool(cellules_norm & {"montant"})
 
     def _est_ligne_transaction(self, ligne: list[str]) -> bool:
@@ -280,16 +273,15 @@ class CSVParserLaBanquePostale:
 
         # Validation de l'appartenance au compte configuré
         releve.valide = (
-            not self.numero_compte or  # Pas de filtre configuré
-            self.numero_compte in releve.numero_compte or
-            releve.numero_compte in self.numero_compte or
-            self.numero_compte == "6804150W020"  # Compte Culture Musique
+            not self.numero_compte  # Pas de filtre configuré
+            or self.numero_compte in releve.numero_compte
+            or releve.numero_compte in self.numero_compte
+            or self.numero_compte == "6804150W020"  # Compte Culture Musique
         )
 
         if not releve.valide:
             logger.warning(
-                f"{chemin.name}: Compte {releve.numero_compte!r} ≠ "
-                f"configuré {self.numero_compte!r}"
+                f"{chemin.name}: Compte {releve.numero_compte!r} ≠ configuré {self.numero_compte!r}"
             )
 
         # ── Phase 3 : Extraire les transactions ───────────────────────────────
@@ -332,7 +324,7 @@ class CSVParserLaBanquePostale:
     def parser_dossier(
         self,
         chemin_dossier: str,
-        annee: Optional[int] = None,
+        annee: int | None = None,
     ) -> list[ReleveInfo]:
         """
         Parse tous les fichiers CSV d'un dossier.
@@ -350,7 +342,8 @@ class CSVParserLaBanquePostale:
 
         # Ignorer les fichiers dupliqués (1).csv
         csvs = sorted(
-            p for p in dossier.glob("*.csv")
+            p
+            for p in dossier.glob("*.csv")
             if not re.search(r" \(\d+\)\.csv$", p.name, re.IGNORECASE)
         )
 
@@ -364,10 +357,7 @@ class CSVParserLaBanquePostale:
                 releve = self.parser_fichier(str(csv_path))
                 # Filtrer par année si demandé
                 if annee:
-                    releve.transactions = [
-                        t for t in releve.transactions
-                        if t.date.year == annee
-                    ]
+                    releve.transactions = [t for t in releve.transactions if t.date.year == annee]
                 releves.append(releve)
             except (ParseError, FileNotFoundError) as e:
                 logger.error(f"Erreur CSV {csv_path.name}: {e}")
@@ -377,7 +367,7 @@ class CSVParserLaBanquePostale:
     def agreger_transactions(
         self,
         releves: list[ReleveInfo],
-        annee: Optional[int] = None,
+        annee: int | None = None,
     ) -> tuple[list[Transaction], list[str]]:
         """
         Agrège les transactions de plusieurs fichiers CSV en supprimant les doublons.
@@ -423,9 +413,7 @@ class CSVParserLaBanquePostale:
 
         return transactions, alertes
 
-    def _detecter_gaps(
-        self, transactions: list[Transaction], annee: int
-    ) -> list[str]:
+    def _detecter_gaps(self, transactions: list[Transaction], annee: int) -> list[str]:
         """
         Détecte les périodes sans aucune transaction dans l'année.
 
@@ -450,7 +438,7 @@ class CSVParserLaBanquePostale:
             alertes.append(
                 f"⚠ Les CSV ne couvrent pas le début de {annee} "
                 f"(première transaction : {premiere.strftime('%d/%m/%Y')}). "
-                f"Des transactions de janvier-{premiere.month-1}/{annee} manquent peut-être."
+                f"Des transactions de janvier-{premiere.month - 1}/{annee} manquent peut-être."
             )
 
         # Vérifier si la fin de l'année est couverte
@@ -467,7 +455,7 @@ class CSVParserLaBanquePostale:
             if delta > 45:
                 alertes.append(
                     f"ℹ Gap de {delta} jours sans transaction : "
-                    f"{transactions[i-1].date.strftime('%d/%m/%Y')} → "
+                    f"{transactions[i - 1].date.strftime('%d/%m/%Y')} → "
                     f"{transactions[i].date.strftime('%d/%m/%Y')} "
                     f"(normal si pas d'activité bancaire)"
                 )

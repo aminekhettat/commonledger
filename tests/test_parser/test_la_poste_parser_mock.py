@@ -9,15 +9,15 @@ Cible : passer la couverture de la_poste_parser.py de 45% à ~90%.
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.parser.la_poste_parser import LaPosteParser
-from core.parser.models import ParseError
-
+from core.parser.models import ReleveInfo
 
 # ── Helpers — construire de faux objets pdfplumber ───────────────────────────
+
 
 def _make_fake_page(texte: str) -> MagicMock:
     """Crée une fausse page pdfplumber avec un texte fixe."""
@@ -77,6 +77,7 @@ class TestValiderReleve:
     def _releve_avec(self, iban: str = "", bic: str = "", num_compte: str = "") -> "ReleveInfo":
         """Crée un ReleveInfo avec les métadonnées extraites du PDF."""
         from core.parser.models import ReleveInfo
+
         r = ReleveInfo(fichier="test.pdf")
         r.iban_pdf = iban
         r.bic_pdf = bic
@@ -135,8 +136,8 @@ class TestValiderReleve:
 
     def test_valide_nom_sans_prefixe_config(self, parser):
         """L'utilisateur entre 'Culture Musique', le PDF a 'ASSO CULTURE MUSIQUE'."""
-        from core.parser.la_poste_parser import LaPosteParser
         from core.parser.models import ReleveInfo
+
         p = LaPosteParser({"nom": "Culture Musique", "iban": "", "bic": "", "numero_compte": ""})
         r = ReleveInfo(fichier="test.pdf")
         # La recherche "culture musique" trouve "asso culture musique" dans le PDF
@@ -145,12 +146,16 @@ class TestValiderReleve:
 
     def test_valide_nom_avec_prefixe_config(self, parser):
         """L'user entre 'Association Culture Musique', la recherche trouve le PDF."""
-        from core.parser.la_poste_parser import LaPosteParser
         from core.parser.models import ReleveInfo
-        p = LaPosteParser({
-            "nom": "Association Culture Musique",
-            "iban": "", "bic": "", "numero_compte": "",
-        })
+
+        p = LaPosteParser(
+            {
+                "nom": "Association Culture Musique",
+                "iban": "",
+                "bic": "",
+                "numero_compte": "",
+            }
+        )
         r = ReleveInfo(fichier="test.pdf")
         # "association culture musique" n'est PAS dans le PDF (qui a "asso culture musique")
         # → rejeté car la recherche est exacte
@@ -162,12 +167,16 @@ class TestValiderReleve:
 
     def test_valide_nom_sans_prefixe_dans_pdf(self, parser):
         """Nom sans préfixe légal dans le PDF (Jazz Club des Amis)."""
-        from core.parser.la_poste_parser import LaPosteParser
         from core.parser.models import ReleveInfo
-        p = LaPosteParser({
-            "nom": "Jazz Club des Amis",
-            "iban": "", "bic": "", "numero_compte": "",
-        })
+
+        p = LaPosteParser(
+            {
+                "nom": "Jazz Club des Amis",
+                "iban": "",
+                "bic": "",
+                "numero_compte": "",
+            }
+        )
         r = ReleveInfo(fichier="test.pdf")
         p._valider_releve(r, texte_pdf=self._PDF_JAZZ_CLUB)
         assert r.valide is True, f"Attendu valide, raisons: {r.raisons_rejet}"
@@ -224,9 +233,9 @@ class TestParserFichierMock:
             releve = parser.parser_fichier(str(path))
 
         txs = sorted(releve.transactions, key=lambda t: t.date)
-        assert txs[0].montant == Decimal("-16.00")   # PayPal débit
-        assert txs[1].montant == Decimal("300.00")   # HelloAsso crédit
-        assert txs[2].montant == Decimal("50.00")    # Remise chèques
+        assert txs[0].montant == Decimal("-16.00")  # PayPal débit
+        assert txs[1].montant == Decimal("300.00")  # HelloAsso crédit
+        assert txs[2].montant == Decimal("50.00")  # Remise chèques
 
     def test_parse_soitenfrancs_format(self, parser, tmp_path):
         """Le format Soitenfrancs (2013-2018) doit extraire les montants en euros."""
@@ -328,6 +337,7 @@ Page 1/1"""
     def test_extraire_metadonnees_nom_via_code_postal(self, parser):
         """Le nom est extrait depuis une ligne 'XXXXX VILLE ASSO ...' (format réel)."""
         from core.parser.models import ReleveInfo
+
         # Format réel : code postal + ville + nom association sur la même ligne
         texte = "75900 PARIS CEDEX 15 ASSO CULTURE MUSIQUE\nAutre ligne"
         r = ReleveInfo(fichier="test.pdf")
@@ -337,19 +347,20 @@ Page 1/1"""
 
     def test_extraire_metadonnees_nom_sans_prefixe_via_correspondance(self):
         """Cas C: nom sans préfixe légal extrait par correspondance avec la config."""
-        from core.parser.la_poste_parser import LaPosteParser
         from core.parser.models import ReleveInfo
+
         # Asso dont le nom ne commence pas par ASSO/ASSOCIATION/etc.
         p = LaPosteParser({"nom": "Jazz Club des Amis", "iban": "", "bic": "", "numero_compte": ""})
         # PDF avec le nom sur une ligne dédiée (pas de préfixe)
         texte = "Releve de votre CCP\nJAZZ CLUB DES AMIS\nSituation du CCP"
         r = ReleveInfo(fichier="test.pdf")
         p._extraire_metadonnees(texte, r)
-        assert r.nom_asso_pdf != "", f"Nom non extrait — attendu 'JAZZ CLUB DES AMIS'"
+        assert r.nom_asso_pdf != "", "Nom non extrait — attendu 'JAZZ CLUB DES AMIS'"
 
     def test_extraire_soldes_format_2013(self, parser):
         """Le format 2013-2018 'Solde au DD/MM/YYYY' est reconnu sans le mot 'Ancien'."""
         from core.parser.models import ReleveInfo
+
         # Texte sans "Ancien solde" — format anciens relevés
         texte = "Situation du compte\nSolde au 01/01/2013 1 234,56\nOpérations du mois"
         r = ReleveInfo(fichier="test.pdf")
@@ -394,8 +405,8 @@ Page 1/1"""
         """Test avec 3 mois de relevés."""
         mois = [
             ("releve_6804150W020_2024-01-31.pdf", "31 janvier 2024", "4 000,00", "3 900,00"),
-            ("releve_6804150W020_2024-02-29.pdf", "29 février 2024",  "3 900,00", "3 800,00"),
-            ("releve_6804150W020_2024-03-31.pdf", "31 mars 2024",     "3 800,00", "3 700,00"),
+            ("releve_6804150W020_2024-02-29.pdf", "29 février 2024", "3 900,00", "3 800,00"),
+            ("releve_6804150W020_2024-03-31.pdf", "31 mars 2024", "3 800,00", "3 700,00"),
         ]
         for nom, date_fin, solde_debut, solde_fin in mois:
             (tmp_path / nom).write_bytes(b"fake")
@@ -447,7 +458,7 @@ Page 1/1"""
         # parser_dossier → le fichier est sauté (non ajouté à la liste).
         # Seul le second relevé (valide) est retourné.
         assert len(releves) == 1
-        assert releves[0].valide is True    # second PDF OK
+        assert releves[0].valide is True  # second PDF OK
 
 
 class TestExtractPeriodePdf:

@@ -10,11 +10,15 @@ Classes exportées:
     CSVParserLaBanquePostale:   Parseur CSV La Banque Postale (export portail).
 """
 
-from .models import Transaction, ParseError, ReleveInfo, TransactionSplit
-from .la_poste_parser import LaPosteParser
 from .csv_parser import CSVParserLaBanquePostale
+from .la_poste_parser import LaPosteParser
+from .models import ParseError, ReleveInfo, Transaction, TransactionSplit
 
 __all__ = [
-    "Transaction", "ParseError", "ReleveInfo", "TransactionSplit",
-    "LaPosteParser", "CSVParserLaBanquePostale",
+    "Transaction",
+    "ParseError",
+    "ReleveInfo",
+    "TransactionSplit",
+    "LaPosteParser",
+    "CSVParserLaBanquePostale",
 ]

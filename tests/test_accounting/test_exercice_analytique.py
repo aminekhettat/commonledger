@@ -44,6 +44,7 @@ class TestExercice:
     def test_date_debut_mauvaise_annee(self, tmp_path):
         """date_debut hors de l'année de l'exercice → ValueError."""
         import pytest
+
         ex = Exercice(2025, str(tmp_path))
         with pytest.raises(ValueError, match="2025"):
             ex.date_debut = date(2024, 12, 31)
@@ -82,6 +83,7 @@ class TestExercice:
     def test_date_fin_depasse_annee_suivante(self, tmp_path):
         """date_fin ne peut pas dépasser le 31/12 de l'année suivante."""
         import pytest
+
         ex = Exercice(2025, str(tmp_path))
         with pytest.raises(ValueError, match="deux années"):
             ex.date_fin = date(2027, 1, 1)
@@ -89,6 +91,7 @@ class TestExercice:
     def test_date_debut_apres_date_fin(self, tmp_path):
         """date_debut postérieure à date_fin → ValueError."""
         import pytest
+
         ex = Exercice(2025, str(tmp_path))
         ex.date_fin = date(2025, 6, 30)
         with pytest.raises(ValueError, match="antérieure"):
@@ -97,6 +100,7 @@ class TestExercice:
     def test_date_fin_avant_date_debut(self, tmp_path):
         """date_fin antérieure à date_debut → ValueError."""
         import pytest
+
         ex = Exercice(2025, str(tmp_path))
         ex.date_debut = date(2025, 6, 1)
         with pytest.raises(ValueError, match="postérieure"):

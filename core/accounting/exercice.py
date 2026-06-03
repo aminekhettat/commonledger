@@ -160,7 +160,9 @@ class Exercice:
                 self._date_debut = date.fromisoformat(data["date_debut"])
             if "date_fin" in data:
                 self._date_fin = date.fromisoformat(data["date_fin"])
-            logger.info(f"Exercice {self.libelle} : {len(self.transactions)} transactions chargées.")
+            logger.info(
+                f"Exercice {self.libelle} : {len(self.transactions)} transactions chargées."
+            )
 
     def sauvegarder(self) -> None:
         """Persiste toutes les données de l'exercice."""
@@ -204,12 +206,10 @@ class Exercice:
         # La période est self.date_debut → self.date_fin (peut être inférieure
         # à une année complète pour les exercices partiels).
         dans_periode = [
-            t for t in releve.transactions
-            if self._date_debut <= t.date <= self._date_fin
+            t for t in releve.transactions if self._date_debut <= t.date <= self._date_fin
         ]
         hors_periode = [
-            t for t in releve.transactions
-            if not (self._date_debut <= t.date <= self._date_fin)
+            t for t in releve.transactions if not (self._date_debut <= t.date <= self._date_fin)
         ]
 
         if hors_periode:

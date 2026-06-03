@@ -8,8 +8,6 @@ Tests en deux catégories :
   2. Tests d'intégration (avec les vrais CSV 2025 — marqueur integration)
 """
 
-import csv
-import io
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -18,14 +16,14 @@ import pytest
 
 from core.parser.csv_parser import (
     CSVParserLaBanquePostale,
+    _extraire_date_depuis_chaine,
     _parse_date_csv,
     _parse_montant_csv,
-    _extraire_date_depuis_chaine,
 )
 from core.parser.models import ParseError
 
-
 # ── Config de test ────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def config():
@@ -106,18 +104,22 @@ def _creer_csv_tmp(tmp_path: Path, contenu: str, nom: str = "test.csv") -> Path:
 
 # ── Tests des fonctions utilitaires ───────────────────────────────────────────
 
+
 class TestParseMontantCsv:
-    @pytest.mark.parametrize("texte,attendu", [
-        ("100,00 €", Decimal("100.00")),
-        ("-27,00 €", Decimal("-27.00")),
-        ("479,96 €", Decimal("479.96")),
-        ("1 115,00 €", Decimal("1115.00")),
-        ("-1 500,00 €", Decimal("-1500.00")),
-        ("1026,54€", Decimal("1026.54")),
-        ("-42,37€", Decimal("-42.37")),
-        ("2 442,77 €", Decimal("2442.77")),
-        ("  100,00  ", Decimal("100.00")),
-    ])
+    @pytest.mark.parametrize(
+        "texte,attendu",
+        [
+            ("100,00 €", Decimal("100.00")),
+            ("-27,00 €", Decimal("-27.00")),
+            ("479,96 €", Decimal("479.96")),
+            ("1 115,00 €", Decimal("1115.00")),
+            ("-1 500,00 €", Decimal("-1500.00")),
+            ("1026,54€", Decimal("1026.54")),
+            ("-42,37€", Decimal("-42.37")),
+            ("2 442,77 €", Decimal("2442.77")),
+            ("  100,00  ", Decimal("100.00")),
+        ],
+    )
     def test_montants_valides(self, texte, attendu):
         assert _parse_montant_csv(texte) == attendu
 
@@ -127,12 +129,15 @@ class TestParseMontantCsv:
 
 
 class TestParseDateCsv:
-    @pytest.mark.parametrize("texte,attendu", [
-        ("10/02/2025", date(2025, 2, 10)),
-        ("01/01/2025", date(2025, 1, 1)),
-        ("31/12/2024", date(2024, 12, 31)),
-        ("  05/07/2025  ", date(2025, 7, 5)),
-    ])
+    @pytest.mark.parametrize(
+        "texte,attendu",
+        [
+            ("10/02/2025", date(2025, 2, 10)),
+            ("01/01/2025", date(2025, 1, 1)),
+            ("31/12/2024", date(2024, 12, 31)),
+            ("  05/07/2025  ", date(2025, 7, 5)),
+        ],
+    )
     def test_dates_valides(self, texte, attendu):
         assert _parse_date_csv(texte) == attendu
 
@@ -155,6 +160,7 @@ class TestExtraireDateDepuisChaine:
 
 
 # ── Tests du parseur CSV ───────────────────────────────────────────────────────
+
 
 class TestCsvParserDetectionLignes:
     def test_detection_entete_colonnes(self, parser):
@@ -429,8 +435,10 @@ class TestAgregateurTransactions:
         f = _creer_csv_tmp(tmp_path, contenu)
         releves = [parser.parser_fichier(str(f))]
         _, alertes = parser.agreger_transactions(releves, annee=2025)
-        assert any("début" in a.lower() or "janvier" in a.lower()
-                   or "manquent" in a.lower() for a in alertes)
+        assert any(
+            "début" in a.lower() or "janvier" in a.lower() or "manquent" in a.lower()
+            for a in alertes
+        )
 
     def test_detection_gap_entre_transactions(self, parser, tmp_path):
         """Alerte si gap > 45 jours entre deux transactions."""
@@ -505,15 +513,15 @@ class TestComparaisonCsvPdf:
 
         # Créer les mêmes transactions côté PDF (même date, libellé, montant)
         tx_pdf = [
-            Transaction(date=date(2025, 1, 15), libelle="HELLOASSO-XYZ HELLOASSO",
-                        montant=Decimal("200.00")),
-            Transaction(date=date(2025, 1, 20), libelle="COTISATION ADISPO",
-                        montant=Decimal("-38.04")),
+            Transaction(
+                date=date(2025, 1, 15), libelle="HELLOASSO-XYZ HELLOASSO", montant=Decimal("200.00")
+            ),
+            Transaction(
+                date=date(2025, 1, 20), libelle="COTISATION ADISPO", montant=Decimal("-38.04")
+            ),
         ]
 
-        comparaison = parser.comparer_avec_pdf(
-            releve_csv.transactions, tx_pdf, annee=2025
-        )
+        comparaison = parser.comparer_avec_pdf(releve_csv.transactions, tx_pdf, annee=2025)
         assert comparaison["nb_csv"] == 2
         assert comparaison["nb_pdf"] == 2
         assert comparaison["nb_communs"] == 2
@@ -535,12 +543,11 @@ class TestComparaisonCsvPdf:
         f = _creer_csv_tmp(tmp_path, contenu)
         releve_csv = parser.parser_fichier(str(f))
 
-        tx_pdf = [Transaction(date=date(2025, 1, 20), libelle="UNIQUEMENT PDF",
-                              montant=Decimal("-50.00"))]
+        tx_pdf = [
+            Transaction(date=date(2025, 1, 20), libelle="UNIQUEMENT PDF", montant=Decimal("-50.00"))
+        ]
 
-        comparaison = parser.comparer_avec_pdf(
-            releve_csv.transactions, tx_pdf, annee=2025
-        )
+        comparaison = parser.comparer_avec_pdf(releve_csv.transactions, tx_pdf, annee=2025)
         assert comparaison["nb_uniquement_csv"] == 1
         assert comparaison["nb_uniquement_pdf"] == 1
         assert comparaison["taux_correspondance"] < 100.0
@@ -560,6 +567,7 @@ class TestComparaisonCsvPdf:
 
 # ── Tests d'intégration avec les vrais fichiers ───────────────────────────────
 
+
 @pytest.mark.integration
 class TestIntegrationCSV2025:
     """Tests sur les vrais fichiers CSV 2025 (nécessite le disque E)."""
@@ -569,6 +577,7 @@ class TestIntegrationCSV2025:
     @pytest.fixture
     def releves_reels(self, config):
         import pathlib
+
         if not pathlib.Path(self.DOSSIER).exists():
             pytest.skip("Disque E absent")
         p = CSVParserLaBanquePostale(config)
@@ -587,6 +596,7 @@ class TestIntegrationCSV2025:
     def test_transactions_2025_coherentes(self, config):
         """Les transactions 2025 ont des montants raisonnables (<50 000€)."""
         import pathlib
+
         if not pathlib.Path(self.DOSSIER).exists():
             pytest.skip("Disque E absent")
         p = CSVParserLaBanquePostale(config)
@@ -598,6 +608,7 @@ class TestIntegrationCSV2025:
     def test_comparaison_avec_pdf_2025(self, config):
         """Compare les résultats CSV vs PDF pour 2025."""
         import pathlib
+
         if not pathlib.Path(self.DOSSIER).exists():
             pytest.skip("Disque E absent")
 
@@ -614,7 +625,7 @@ class TestIntegrationCSV2025:
 
         comparaison = p.comparer_avec_pdf(txs_csv, exercice.transactions, annee=2025)
 
-        print(f"\nComparaison CSV vs PDF pour 2025:")
+        print("\nComparaison CSV vs PDF pour 2025:")
         print(f"  Transactions CSV : {comparaison['nb_csv']}")
         print(f"  Transactions PDF : {comparaison['nb_pdf']}")
         print(f"  Communes         : {comparaison['nb_communs']}")
@@ -623,10 +634,11 @@ class TestIntegrationCSV2025:
         print(f"  Taux correspondance : {comparaison['taux_correspondance']:.1f}%")
 
         if alertes:
-            print(f"\nAlertes CSV:")
+            print("\nAlertes CSV:")
             for a in alertes:
                 print(f"  {a}")
 
         # La correspondance doit être raisonnable (> 50%)
-        assert comparaison["taux_correspondance"] > 50, \
+        assert comparaison["taux_correspondance"] > 50, (
             f"Trop peu de correspondances: {comparaison['taux_correspondance']:.1f}%"
+        )

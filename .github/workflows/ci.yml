@@ -54,7 +54,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: MyPy — core/
-        run: mypy core/ --ignore-missing-imports --no-strict-optional
+        # Utilise la config de pyproject.toml (overrides par module inclus)
+        run: mypy core/ --config-file pyproject.toml
 
   # ── 3. Sécurité ───────────────────────────────────────────────────────────
   security:
@@ -95,19 +96,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libegl1
+          sudo apt-get install -y libgl1 libglib2.0-0 libegl1
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-qt
 
       - name: Run tests (core only, sans UI)
-        run: |
-          pytest tests/ \
-            -m "not integration and not ui" \
-            --cov=core \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --cov-fail-under=75 \
-            -v
+        # Les paramètres --cov et --cov-fail-under=100 viennent de pyproject.toml
+        run: pytest tests/ -m "not integration and not ui" -v
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

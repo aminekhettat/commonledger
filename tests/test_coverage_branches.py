@@ -4,7 +4,6 @@ Tests ciblés sur les branches non couvertes — objectif 100%.
 Chaque test est documenté avec le fichier:ligne qu'il couvre.
 """
 
-import shutil
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -12,10 +11,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. core/accounting/analytique.py
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestAnalitiqueNonCouverts:
     """Branches manquantes dans analytique.py."""
@@ -52,18 +51,21 @@ class TestAnalitiqueNonCouverts:
 # 2. core/accounting/bilan.py
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestBilanNonCouverts:
     """Branches manquantes dans bilan.py."""
 
     def test_taux_amort_duree_zero(self):
         """L100 — duree_amort=0 → taux=0 (division par zéro protégée)."""
         from core.accounting.bilan import Immobilisation
+
         immo = Immobilisation(id="x", designation="Test", duree_amort=0)
         assert immo.taux_amort == Decimal("0")  # L100
 
     def test_lignes_actif_avec_immobilisations(self):
         """L242 — immobilisations_nettes > 0 apparaissent dans actif."""
         from core.accounting.bilan import Bilan
+
         b = Bilan(immobilisations_nettes=Decimal("500"), solde_bancaire=Decimal("1000"))
         labels = [l.label for l in b.lignes_actif()]
         assert any("Immobil" in lbl for lbl in labels)  # L242
@@ -71,6 +73,7 @@ class TestBilanNonCouverts:
     def test_lignes_actif_avec_creances(self):
         """L248-253 — créances → sous-lignes actif circulant."""
         from core.accounting.bilan import Bilan
+
         b = Bilan(
             creances_adherents=Decimal("100"),
             autres_creances=Decimal("50"),
@@ -88,6 +91,7 @@ class TestBilanNonCouverts:
     def test_lignes_passif_subventions_affectees(self):
         """L286 — subventions_affectees > 0 → ligne passif."""
         from core.accounting.bilan import Bilan
+
         b = Bilan(subventions_affectees=Decimal("2000"), resultat_exercice=Decimal("500"))
         labels = [l.label for l in b.lignes_passif()]
         assert any("Subventions" in lbl or "Fonds" in lbl for lbl in labels)  # L286
@@ -95,6 +99,7 @@ class TestBilanNonCouverts:
     def test_lignes_passif_autres_dettes(self):
         """L298 — autres_dettes > 0 → sous-ligne dettes."""
         from core.accounting.bilan import Bilan
+
         b = Bilan(autres_dettes=Decimal("300"), resultat_exercice=Decimal("100"))
         all_labels = []
         for l in b.lignes_passif():
@@ -106,9 +111,11 @@ class TestBilanNonCouverts:
     def test_immobilisations_nettes_avec_actives(self, tmp_path):
         """L351-353 — immobilisations_nettes() avec des immobilisations actives."""
         from core.accounting.bilan import GestionnaireBilan, Immobilisation
+
         g = GestionnaireBilan(str(tmp_path))
         immo = Immobilisation(
-            id="1", designation="Sono",
+            id="1",
+            designation="Sono",
             date_achat=date(2022, 1, 1),
             valeur_brute=Decimal("1000"),
             duree_amort=5,
@@ -128,10 +135,16 @@ class TestBilanNonCouverts:
         g = GestionnaireBilan(str(tmp_path))
         t = Transaction(date=date(2024, 1, 1), libelle="HELLOASSO", montant=Decimal("500"))
         t.categorie_id = "cotisations"
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31))
+        cr = CompteResultat(
+            moteur=moteur,
+            transactions=[t],
+            date_debut=date(2024, 1, 1),
+            date_fin=date(2024, 12, 31),
+        )
         bilan = g.construire_bilan(
-            2024, cr, Decimal("2000"),
+            2024,
+            cr,
+            Decimal("2000"),
             fonds_associatifs=Decimal("1500"),
         )
         assert bilan.annee == 2024  # L387-389
@@ -140,6 +153,7 @@ class TestBilanNonCouverts:
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. core/accounting/compte_resultat.py
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestCompteResultatNonCouverts:
     """Branches manquantes dans compte_resultat.py."""
@@ -152,9 +166,13 @@ class TestCompteResultatNonCouverts:
         t = Transaction(date=date(2024, 1, 1), libelle="TEST", montant=Decimal("100"))
         t.splits = [TransactionSplit(Decimal("100"), "cotisations", projet_id="proj-1")]
 
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31),
-                            projet_id="proj-1")
+        cr = CompteResultat(
+            moteur=moteur,
+            transactions=[t],
+            date_debut=date(2024, 1, 1),
+            date_fin=date(2024, 12, 31),
+            projet_id="proj-1",
+        )
         assert t in cr._transactions_periode  # L134-137 couvert
 
     def test_split_filtre_projet_non_correspondant(self, moteur):
@@ -168,9 +186,13 @@ class TestCompteResultatNonCouverts:
             TransactionSplit(Decimal("40"), "dons", projet_id="proj-cible"),
         ]
 
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31),
-                            projet_id="proj-cible")
+        cr = CompteResultat(
+            moteur=moteur,
+            transactions=[t],
+            date_debut=date(2024, 1, 1),
+            date_fin=date(2024, 12, 31),
+            projet_id="proj-cible",
+        )
         # Seulement 40€ de dons comptés, pas les 60€ d'un autre projet
         assert cr.total_recettes == Decimal("40")  # L191 : continue si projet ne matche pas
 
@@ -181,8 +203,12 @@ class TestCompteResultatNonCouverts:
 
         t = Transaction(date=date(2024, 1, 1), libelle="ADISPO", montant=Decimal("-38.04"))
         t.categorie_id = "frais_bancaires"
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31))
+        cr = CompteResultat(
+            moteur=moteur,
+            transactions=[t],
+            date_debut=date(2024, 1, 1),
+            date_fin=date(2024, 12, 31),
+        )
         assert cr.total_depenses == Decimal("38.04")  # L200 couvert
 
     def test_categorie_inconnue_cree_generique(self, moteur):
@@ -192,8 +218,12 @@ class TestCompteResultatNonCouverts:
 
         t = Transaction(date=date(2024, 1, 1), libelle="TEST", montant=Decimal("100"))
         t.categorie_id = "categorie_inconnue_xyz"  # n'existe pas dans le moteur
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31))
+        cr = CompteResultat(
+            moteur=moteur,
+            transactions=[t],
+            date_debut=date(2024, 1, 1),
+            date_fin=date(2024, 12, 31),
+        )
         # La catégorie inconnue est quand même affichée avec un label générique
         if cr.lignes_recettes:
             assert "categorie_inconnue_xyz" in cr.lignes_recettes[0].categorie.label
@@ -208,8 +238,9 @@ class TestCompteResultatNonCouverts:
             TransactionSplit(Decimal("120"), "cotisations"),
             TransactionSplit(Decimal("80"), "frais_bancaires"),  # dépense
         ]
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 1, 31))
+        cr = CompteResultat(
+            moteur=moteur, transactions=[t], date_debut=date(2024, 1, 1), date_fin=date(2024, 1, 31)
+        )
         evo = cr.evolution_mensuelle()
         assert len(evo) == 1
         assert evo[0]["recettes"] == Decimal("120")  # L290-295 couvert
@@ -218,18 +249,22 @@ class TestCompteResultatNonCouverts:
     def test_verifier_coherence_soldes(self, moteur):
         """L335-361 — verifier_coherence_soldes détecte un écart."""
         from core.accounting.compte_resultat import CompteResultat
-        from core.parser.models import Transaction, ReleveInfo
+        from core.parser.models import Transaction
 
         t = Transaction(date=date(2024, 1, 8), libelle="HELLOASSO", montant=Decimal("300"))
         t.categorie_id = "cotisations"
 
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31),
-                            solde_initial=Decimal("1000"))
+        cr = CompteResultat(
+            moteur=moteur,
+            transactions=[t],
+            date_debut=date(2024, 1, 1),
+            date_fin=date(2024, 12, 31),
+            solde_initial=Decimal("1000"),
+        )
 
         # Créer un relevé avec un solde incorrect
         releve = MagicMock()
-        releve.solde_fin = Decimal("1200")   # devrait être 1300 (1000+300)
+        releve.solde_fin = Decimal("1200")  # devrait être 1300 (1000+300)
         releve.periode_fin = date(2024, 1, 31)
 
         alertes = cr.verifier_coherence_soldes([releve])
@@ -240,8 +275,9 @@ class TestCompteResultatNonCouverts:
         """L341 continue — relevé sans solde_fin ignoré."""
         from core.accounting.compte_resultat import CompteResultat
 
-        cr = CompteResultat(moteur=moteur, transactions=[],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31))
+        cr = CompteResultat(
+            moteur=moteur, transactions=[], date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31)
+        )
         releve = MagicMock()
         releve.solde_fin = None
         releve.periode_fin = date(2024, 1, 31)
@@ -253,13 +289,14 @@ class TestCompteResultatNonCouverts:
 # 4. core/accounting/exercice.py
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestExerciceNonCouverts:
     """Branches manquantes dans exercice.py."""
 
     def test_importer_releve_copie_pdf(self, tmp_path):
         """L133-137 — copier_pdf=True copie le fichier dans releves_importes/."""
-        from core.parser.models import ReleveInfo
         from core.accounting.exercice import Exercice
+        from core.parser.models import ReleveInfo
 
         # Créer un vrai fichier PDF factice
         pdf_src = tmp_path / "source" / "releve_test.pdf"
@@ -281,12 +318,14 @@ class TestExerciceNonCouverts:
 # 5. core/categorizer/rules_engine.py
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestRulesEngineNonCouverts:
     """Branches manquantes dans rules_engine.py."""
 
     def test_charger_fichier_introuvable(self):
         """L148 — FileNotFoundError si config absente."""
         from core.categorizer.rules_engine import MoteurCategorisation
+
         with pytest.raises(FileNotFoundError):
             MoteurCategorisation("/chemin/inexistant/categories.json")
 
@@ -299,7 +338,8 @@ class TestRulesEngineNonCouverts:
     def test_sauvegarder_avec_details_requis(self, config_categories_path, tmp_path):
         """L190-191 — sauvegarder() avec details_requis=True."""
         import json
-        from core.categorizer.rules_engine import MoteurCategorisation, Categorie
+
+        from core.categorizer.rules_engine import Categorie, MoteurCategorisation
 
         # Copier config dans un répertoire tmp
         chemin_tmp = tmp_path / "categories.json"
@@ -308,8 +348,11 @@ class TestRulesEngineNonCouverts:
 
         # Ajouter une catégorie avec details_requis=True
         cat = Categorie(
-            id="prest_test", label="Prestataire test", type="depenses",
-            details_requis=True, champs_details=["nom_prestataire"],
+            id="prest_test",
+            label="Prestataire test",
+            type="depenses",
+            details_requis=True,
+            champs_details=["nom_prestataire"],
         )
         moteur_tmp.ajouter_categorie(cat)  # L190-191 couvert via sauvegarder()
 
@@ -328,6 +371,7 @@ class TestRulesEngineNonCouverts:
     def test_ajouter_categorie_id_vide(self, moteur):
         """L366 — ValueError si id vide."""
         from core.categorizer.rules_engine import Categorie
+
         cat = Categorie(id="", label="Sans id", type="recettes")
         with pytest.raises(ValueError):
             moteur.ajouter_categorie(cat)  # L366
@@ -335,6 +379,7 @@ class TestRulesEngineNonCouverts:
     def test_ajouter_categorie_type_conflictuel(self, moteur):
         """L369-371 — ValueError si catégorie existante avec type différent."""
         from core.categorizer.rules_engine import Categorie
+
         # cotisations est une recette → essayer de la ré-ajouter en dépense
         cat_conflit = Categorie(id="cotisations", label="Cotisations", type="depenses")
         with pytest.raises(ValueError):
@@ -342,7 +387,7 @@ class TestRulesEngineNonCouverts:
 
     def test_supprimer_categorie_succes(self, config_categories_path, tmp_path):
         """L393-394 — supprimer_categorie réussit et sauvegarde."""
-        from core.categorizer.rules_engine import MoteurCategorisation, Categorie
+        from core.categorizer.rules_engine import Categorie, MoteurCategorisation
 
         chemin_tmp = tmp_path / "categories.json"
         chemin_tmp.write_text(config_categories_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -359,23 +404,27 @@ class TestRulesEngineNonCouverts:
 # 6. core/parser/la_poste_parser.py
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestParserBranchesNonCouvertes:
     """Branches manquantes dans la_poste_parser.py."""
 
     def test_parse_mois_fr_inconnu(self):
         """L98 — _parse_mois_fr retourne None pour un mois inconnu."""
         from core.parser.la_poste_parser import _parse_mois_fr
+
         assert _parse_mois_fr("thermidor") is None  # L98
 
     def test_parse_date_complete_invalide(self):
         """L158-160 — _parse_date_complete avec date invalide (32 janvier)."""
         from core.parser.la_poste_parser import _parse_date_complete
+
         result = _parse_date_complete("32/01/2024")  # date invalide
         assert result is None  # L158-160
 
     def test_extraire_numero_compte_depuis_iban(self):
         """L190, L199-205 — extraction du numéro depuis l'IBAN."""
         from core.parser.la_poste_parser import LaPosteParser
+
         config = {"iban": "FR9420041000016804150W02084", "bic": "PSSTFRPPPAR"}
         p = LaPosteParser(config)
         assert p.numero_compte == "6804150W020"  # L190, L199-205
@@ -383,6 +432,7 @@ class TestParserBranchesNonCouvertes:
     def test_extraire_numero_compte_iban_invalide(self):
         """L205 — IBAN ne correspondant pas → retourne ''."""
         from core.parser.la_poste_parser import LaPosteParser
+
         config = {"iban": "FRCOURT", "numero_compte": ""}
         p = LaPosteParser(config)
         assert p.numero_compte == ""  # L205
@@ -391,6 +441,7 @@ class TestParserBranchesNonCouvertes:
         """_valider_releve rejette si num_compte config != PDF."""
         from core.parser.la_poste_parser import LaPosteParser
         from core.parser.models import ReleveInfo
+
         config = {"iban": "", "bic": "", "numero_compte": "6804150W020", "nom": ""}
         p = LaPosteParser(config)
         r = ReleveInfo(fichier="test.pdf")
@@ -434,6 +485,7 @@ Ancien solde au 31/05/2024
 Nouveau solde 1 000,00
 Page 1/1"""
         from tests.test_parser.test_la_poste_parser_mock import _make_fake_pdf
+
         with patch("pdfplumber.open", return_value=_make_fake_pdf([texte])):
             releve = parser.parser_fichier(str(path))
         # Le numéro doit être extrait (L430)
@@ -443,6 +495,7 @@ Page 1/1"""
     def test_extraire_soldes_ancien_solde_inline(self, parser):
         """L467-468 — ancien solde dans la ligne elle-même (i>0, ligne précédente non parsable)."""
         from core.parser.models import ReleveInfo
+
         # La ligne précédente (Entête) ne parse pas comme un montant
         # → le code tombe sur le fallback _RE_ANCIEN_SOLDE.search (L467-468)
         texte = "Entête du relevé\nAncien solde au 31/12/2023 4 424,17\nAutre ligne\n"
@@ -474,10 +527,18 @@ Page 1/1"""
         """L706, L713, L727-728 — déduplication avec compteur."""
         # Deux transactions identiques dans la même page
         lignes = [
-            {"date": date(2024, 1, 8), "libelle": "REMISE DE CHEQUES DU 04/01/2024",
-             "debit": None, "credit": Decimal("100.00")},
-            {"date": date(2024, 1, 8), "libelle": "REMISE DE CHEQUES DU 04/01/2024",
-             "debit": None, "credit": Decimal("100.00")},
+            {
+                "date": date(2024, 1, 8),
+                "libelle": "REMISE DE CHEQUES DU 04/01/2024",
+                "debit": None,
+                "credit": Decimal("100.00"),
+            },
+            {
+                "date": date(2024, 1, 8),
+                "libelle": "REMISE DE CHEQUES DU 04/01/2024",
+                "debit": None,
+                "credit": Decimal("100.00"),
+            },
         ]
         txs = parser._construire_transactions(lignes, "test.pdf")
         # Deux transactions distinctes malgré id_unique identique
@@ -497,15 +558,17 @@ Page 1/1"""
 # 7. core/reporter/csv_reporter.py
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestCsvReporterNonCouverts:
     """Branches manquantes dans csv_reporter.py."""
 
     def test_ecrire_detail_avec_split(self, tmp_path, moteur):
         """L175-177 — transaction splittée dans le CSV détail."""
-        from core.accounting.compte_resultat import CompteResultat
-        from core.reporter.csv_reporter import CsvReporter
-        from core.parser.models import Transaction, TransactionSplit
         import csv
+
+        from core.accounting.compte_resultat import CompteResultat
+        from core.parser.models import Transaction, TransactionSplit
+        from core.reporter.csv_reporter import CsvReporter
 
         t = Transaction(date=date(2024, 1, 8), libelle="HELLOASSO", montant=Decimal("300"))
         t.splits = [
@@ -513,8 +576,12 @@ class TestCsvReporterNonCouverts:
             TransactionSplit(Decimal("100"), "dons"),
         ]
 
-        cr = CompteResultat(moteur=moteur, transactions=[t],
-                            date_debut=date(2024, 1, 1), date_fin=date(2024, 12, 31))
+        cr = CompteResultat(
+            moteur=moteur,
+            transactions=[t],
+            date_debut=date(2024, 1, 1),
+            date_fin=date(2024, 12, 31),
+        )
         reporter = CsvReporter(moteur, cr)
         _, detail = reporter.exporter(str(tmp_path))
 
