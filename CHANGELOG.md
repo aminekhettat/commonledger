@@ -1,7 +1,42 @@
 # CHANGELOG
 
 
+## v0.7.1 (2026-06-03)
+
+### Bug Fixes
+
+- Robust association name matching ÔÇö strip legal prefixes before comparison
+  ([`7bb8bb0`](https://github.com/aminekhettat/commonledger/commit/7bb8bb01decd2b820ecb54111d47e071a8231629))
+
+Users enter the association name WITHOUT legal prefix (e.g. 'Culture Musique')
+
+but the bank writes 'ASSO CULTURE MUSIQUE' in the PDF. The parser now
+
+normalises both sides by stripping legal prefixes (ASSO, ASSOCIATION, LIGUE...)
+
+before comparing, so both become 'CULTURE MUSIQUE' and match correctly.
+
+Also fixed: 'CENTRE FINANCIER' (bank branch name in PDF header) was being
+
+incorrectly extracted as the association name because CENTRE was in the
+
+extraction trigger list. Removed CENTRE, FOYER, CERCLE from cas B triggers
+
+(too ambiguous); associations using those terms are still found via cas A
+
+(postal code pattern) or cas C (direct config match).
+
+New methods: _nom_sans_prefixe(), _PREFIXES_LEGAUX regex.
+
+344 tests, 100 coverage.
+
+
 ## v0.7.0 (2026-06-03)
+
+### Chores
+
+- **release**: V0.7.0 [skip ci]
+  ([`81af355`](https://github.com/aminekhettat/commonledger/commit/81af3553a4acb56b626ae0c806bfd35fbf0ae66f))
 
 ### Features
 
