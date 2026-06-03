@@ -257,7 +257,7 @@ class GraphiqueCanvas(FigureCanvas):
         periode: str,
         titre_graph: str,
         version_app: str = "",
-        dpi: int = 150,
+        dpi: int = 300,
     ) -> None:
         """
         Sauvegarde le graphique courant en PNG avec en-tête et pied de page.
@@ -272,7 +272,7 @@ class GraphiqueCanvas(FigureCanvas):
             periode:          Ex : "01/01/2025 → 31/12/2025".
             titre_graph:      Type de graphique (ex : "Camembert — Recettes").
             version_app:      Version de l'application (pied de page).
-            dpi:              Résolution PNG (défaut 150 dpi — bon compromis).
+            dpi:              Résolution PNG (défaut 300 dpi — qualité impression).
         """
         from datetime import date as dt_date
 
@@ -728,7 +728,7 @@ class ReportWidget(QWidget):
 
         # ── Sauvegarder ──────────────────────────────────────────────────
         try:
-            dpi = 200 if chemin.lower().endswith(".png") else 150
+            dpi = 300 if chemin.lower().endswith(".png") else 150
             self._canvas.sauvegarder_vers(
                 chemin=chemin,
                 nom_asso=nom_asso,
