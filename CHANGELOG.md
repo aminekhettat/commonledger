@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.7.6 (2026-06-03)
+
+### Bug Fixes
+
+- Sort imports (ruff I001) after TYPE_CHECKING additions
+  ([`008da40`](https://github.com/aminekhettat/commonledger/commit/008da4097e376b7f3fcedc9495e1713ef94ed1a8))
+
+
 ## v0.7.5 (2026-06-03)
 
 ### Bug Fixes
@@ -21,6 +29,11 @@ pytest: test_convertir_en_pdf_word_com_succes now skipped on non-Windows
 (Word COM is unavailable on Linux CI runners)
 
 docs: requirements-dev.txt force-added (was gitignored)
+
+### Chores
+
+- **release**: V0.7.5 [skip ci]
+  ([`456e915`](https://github.com/aminekhettat/commonledger/commit/456e9153c54e94dcd2ec8367f8599c04ff1badf4))
 
 
 ## v0.7.4 (2026-06-03)
