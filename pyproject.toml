@@ -8,7 +8,7 @@ build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name = "commonledger"
-version = "0.7.3"
+version = "0.7.4"
 description = "Simplified accounting for non-profit associations — open source, accessible NVDA/JAWS"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -56,6 +56,8 @@ commonledger = "main:main"
 #   bump-my-version bump minor   → 0.1.0 → 0.2.0  (nouvelle fonctionnalité)
 #   bump-my-version bump major   → 0.1.0 → 1.0.0  (rupture de compatibilité)
 # ============================================================
+
+
 
 
 

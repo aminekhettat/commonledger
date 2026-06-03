@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v0.7.4 (2026-06-03)
+
+### Bug Fixes
+
+- Properly annotate types instead of masking mypy errors
+  ([`1c8f459`](https://github.com/aminekhettat/commonledger/commit/1c8f459d42bcf1909ee5b08d1955a3ca8f4c1a06))
+
+All 42 mypy errors are now genuinely fixed ÔÇö no ignore_errors, no blanket
+
+disabling of rules. Specific changes:
+
+- Added 'from typing import Any' in 8 files
+
+- dict/list/tuple without type args -> dict[str, Any], list[X], tuple[X, Y]
+
+- __post_init__ missing -> None annotation fixed
+
+- Missing parameter annotations added (bilan.py, analytique.py)
+
+- csv_parser.py meta dict: dict[str, Any] fixes date/Decimal assignment errors
+
+- la_poste_parser.py _extraire_periode_pdf: -> tuple[date | None, date | None]
+
+- compte_resultat.py: accumulators typed dict[str, ...] not dict[str|None, ...]
+
+(invariant: non-categorized transactions filtered before accumulation)
+
++ assert cat_id is not None to express and enforce this invariant
+
++ removed dead guard 'if cat_id is None: continue'
+
+- pyproject.toml: restored strict settings; docx_reporter/graphiques use
+
+targeted disable_error_code (not ignore_errors=true)
+
+mypy: 0 errors in 16 files. 343 tests. 100% coverage.
+
+
 ## v0.7.3 (2026-06-03)
 
 ### Bug Fixes
@@ -29,6 +67,11 @@ CI now delegates --cov-fail-under=100 to pyproject.toml addopts
 4. DOCS: added requirements-dev.txt (was missing from repo)
 
 343 tests, 100 coverage.
+
+### Chores
+
+- **release**: V0.7.3 [skip ci]
+  ([`7c491a0`](https://github.com/aminekhettat/commonledger/commit/7c491a0eee4c88d46ca68865fb0e7c6bb24e6a86))
 
 
 ## v0.7.2 (2026-06-03)
