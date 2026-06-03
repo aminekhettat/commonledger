@@ -588,6 +588,17 @@ class LaPosteParser:
         # Ligne contenant uniquement un numéro de page (ex: "4", "12")
         if re.match(r"^\d+$", ligne.strip()):
             return True
+
+        # Note de bas de page : chiffre(s) immédiatement suivis d'une lettre
+        # sans espace intermédiaire.
+        # Exemples à ignorer :
+        #   "4Fraisetcotisationsperçusouremboursés."  (note pied de page)
+        # Exemples à NE PAS ignorer (lignes de continuation légitimes) :
+        #   "6121209 Billetterie Weezevent..."         (référence numérique + espace)
+        #   "l. et Cie S.C.A REF : ..."               (suite libellé)
+        if re.match(r"^\d+[A-Za-zÀ-ÿ]", ligne.strip()):
+            return True
+
         ligne_upper = ligne.upper()
         return any(mot.upper() in ligne_upper for mot in mots_cles_ignore)
 
