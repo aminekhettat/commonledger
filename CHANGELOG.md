@@ -1,7 +1,20 @@
 # CHANGELOG
 
 
+## v0.6.1 (2026-06-03)
+
+### Bug Fixes
+
+- Set chart PNG export resolution to 300 DPI (print quality)
+  ([`8876f14`](https://github.com/aminekhettat/commonledger/commit/8876f143c24321f2f39a2006c12023e7511ea441))
+
+
 ## v0.6.0 (2026-06-02)
+
+### Chores
+
+- **release**: V0.6.0 [skip ci]
+  ([`7ff1190`](https://github.com/aminekhettat/commonledger/commit/7ff11900bdf3b7d2ba870ff0f7c1c6cff0a5859e))
 
 ### Features
 
