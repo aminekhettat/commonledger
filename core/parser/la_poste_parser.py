@@ -204,74 +204,77 @@ class LaPosteParser:
                 return candidat
         return ""  # pragma: no cover
 
-    # Préfixes légaux à ignorer lors de la comparaison des noms.
-    # L'utilisateur entre "Culture Musique", la banque écrit "ASSO CULTURE MUSIQUE" :
-    # après suppression du préfixe, les deux donnent "CULTURE MUSIQUE".
-    _PREFIXES_LEGAUX = re.compile(
-        r"^(?:ASSOCIATION|ASSO|UNION|LIGUE|FEDERATION|CLUB|COMITE|GROUPE|FONDATION"
-        r"|SYNDICAT|GROUPEMENT|COLLECTIF|RESEAU|AMICALE|FOYER|CENTRE|CERCLE)"
-        r"\s+",
-        re.IGNORECASE,
-    )
+    @staticmethod
+    def _normaliser_pour_recherche(texte: str) -> str:
+        """
+        Normalise un texte pour la recherche dans le PDF.
 
+        Supprime les accents (unicodedata NFD), les artefacts d'encodage PDF
+        connus (Ø→e, ß→u) et met en minuscules avec espaces réduits.
+
+        Exemples :
+            "Culture Musique"           → "culture musique"
+            "Société des Amis"          → "societe des amis"
+            "ASSO CULTURE MUSIQUE"      → "asso culture musique"
+
+        Grâce à cette normalisation, l'utilisateur peut saisir "Culture Musique"
+        et la recherche trouvera "ASSO CULTURE MUSIQUE" dans le PDF (substring).
+        """
+        import unicodedata
+        nfd = unicodedata.normalize("NFD", texte)
+        sans_accent = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+        # Artefacts d'encodage spécifiques aux PDFs LBP
+        sans_accent = (
+            sans_accent
+            .replace("ø", "e").replace("Ø", "e")
+            .replace("ß", "u").replace("œ", "oe").replace("Œ", "oe")
+        )
+        return " ".join(sans_accent.lower().split())
+
+    # Gardé pour compatibilité avec les tests existants
     @staticmethod
     def _normaliser_nom(texte: str) -> str:
-        """Normalise un nom pour la comparaison (sans accents, majuscules, espaces réduits)."""
+        """Normalise un nom (sans accents, majuscules, espaces réduits)."""
         import unicodedata
         nfd = unicodedata.normalize("NFD", texte)
         sans_accent = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
         return " ".join(sans_accent.upper().split())
 
-    @classmethod
-    def _nom_sans_prefixe(cls, texte: str) -> str:
-        """
-        Supprime le préfixe légal d'un nom d'association normalisé.
-
-        Exemples :
-            "ASSO CULTURE MUSIQUE"      → "CULTURE MUSIQUE"
-            "ASSOCIATION JAZZ CLUB"     → "JAZZ CLUB"
-            "CULTURE MUSIQUE"           → "CULTURE MUSIQUE" (inchangé)
-            "LIGUE DES DROITS DE L'HO" → "DROITS DE L HO"
-
-        Cela permet à l'utilisateur de saisir "Culture Musique" dans les
-        paramètres, même si la banque écrit "ASSO CULTURE MUSIQUE" dans le PDF.
-        """
-        texte_norm = cls._normaliser_nom(texte)
-        return cls._PREFIXES_LEGAUX.sub("", texte_norm).strip()
-
-    def _valider_releve(self, releve: ReleveInfo) -> None:
+    def _valider_releve(self, releve: ReleveInfo, texte_pdf: str = "") -> None:
         """
         Valide le relevé extrait contre la configuration de l'association.
 
         Vérifie dans l'ordre :
-        1. Nom de l'association (correspondance partielle, insensible à la casse et aux accents)
+        1. Nom de l'association — recherche directe de la chaîne normalisée
+           (sans accents, minuscules) dans le texte brut du PDF. Aucune
+           extraction préalable ni gestion de préfixes légaux n'est nécessaire :
+           "culture musique" est une sous-chaîne de "asso culture musique". ✓
         2. IBAN (correspondance stricte, sans espaces)
         3. BIC (correspondance stricte)
         4. Numéro de compte (correspondance stricte)
 
+        Args:
+            releve:    ReleveInfo à valider (modifié en place).
+            texte_pdf: Texte brut de la première page du PDF (pour la recherche
+                       du nom). Si vide, la vérification du nom est ignorée.
+
         Les raisons de rejet sont stockées dans releve.raisons_rejet.
         releve.valide est True uniquement si aucune règle configurée n'est violée.
-        Si un champ n'est pas configuré (chaîne vide), la vérification est ignorée.
         """
         raisons: list[str] = []
 
-        # 1. Nom de l'association
-        # Les deux côtés sont normalisés ET débarrassés de leur préfixe légal
-        # avant comparaison, de sorte que :
-        #   config="Culture Musique"  →  sans_prefixe="CULTURE MUSIQUE"
-        #   PDF="ASSO CULTURE MUSIQUE" →  sans_prefixe="CULTURE MUSIQUE"
-        #   → identiques ✓
-        if self.nom_association and releve.nom_asso_pdf:
-            nom_conf = self._nom_sans_prefixe(self.nom_association)
-            nom_pdf  = self._nom_sans_prefixe(releve.nom_asso_pdf)
-            if nom_conf not in nom_pdf and nom_pdf not in nom_conf:
+        # 1. Nom de l'association — recherche directe dans le texte PDF
+        if self.nom_association and texte_pdf:
+            nom_conf = self._normaliser_pour_recherche(self.nom_association)
+            texte_norm = self._normaliser_pour_recherche(texte_pdf)
+            if nom_conf not in texte_norm:
                 raisons.append(
-                    f"Nom de la structure : config='{self.nom_association}' "
-                    f"!= PDF='{releve.nom_asso_pdf}'"
+                    f"Nom de la structure : '{self.nom_association}' "
+                    f"introuvable dans le PDF"
                 )
-        elif self.nom_association and not releve.nom_asso_pdf:
+        elif self.nom_association and not texte_pdf:
             logger.info(
-                f"{Path(releve.fichier).name} : nom non extrait du PDF, "
+                f"{Path(releve.fichier).name} : texte PDF absent, "
                 "verification du nom ignoree"
             )
 
@@ -348,6 +351,7 @@ class LaPosteParser:
         try:
             with pdfplumber.open(chemin_pdf) as pdf:
                 texte_complet = ""
+                texte_page_0 = ""
                 toutes_lignes: list[dict] = []
 
                 for num_page, page in enumerate(pdf.pages):
@@ -355,19 +359,18 @@ class LaPosteParser:
                     texte_complet += "\n" + texte_page
 
                     if num_page == 0:
+                        texte_page_0 = texte_page
                         self._extraire_metadonnees(texte_page, releve)
 
                     lignes = self._extraire_lignes_page(texte_page, annee_fichier, mois_fichier)
                     toutes_lignes.extend(lignes)
 
-                # Note: la période est extraite uniquement du corps du PDF
-                # (voir _extraire_periode_pdf). Pas de fallback sur le nom de fichier.
-
                 # Extraire les soldes depuis le texte complet
                 self._extraire_soldes(texte_complet, releve)
 
-                # Valider le relevé contre la configuration de l'association
-                self._valider_releve(releve)
+                # Valider le relevé — le nom est recherché directement dans
+                # le texte brut de la première page (approche robuste et simple)
+                self._valider_releve(releve, texte_pdf=texte_page_0)
 
                 # Convertir en objets Transaction
                 releve.transactions = self._construire_transactions(toutes_lignes, chemin.name)
@@ -542,34 +545,21 @@ class LaPosteParser:
             ligne_norm = _normaliser_pdf_texte(ligne).upper()
             # Chercher le numéro de compte dans la ligne pour exclure les lignes sans rapport
             # ── Stratégie d'extraction du nom ────────────────────────────────
-            # La banque écrit le nom du titulaire dans le bloc d'en-tête.
-            # Deux formats observés :
-            #   A) Sur la même ligne que le code postal / ville :
-            #      "75900 PARIS CEDEX 15 ASSO CULTURE MUSIQUE"
-            #   B) Sur une ligne dédiée après l'adresse :
-            #      "ASSO CULTURE MUSIQUE"  ou  "JAZZ CLUB DES AMIS"
-            #
-            # La correspondance avec la config se fait APRÈS suppression du
-            # préfixe légal (voir _nom_sans_prefixe), donc il n'est pas
-            # nécessaire que le nom extrait commence par "ASSO/ASSOCIATION".
+            # Extraction du nom pour le logging et le champ nom_asso_pdf.
+            # Note : la VALIDATION du nom utilise _normaliser_pour_recherche()
+            # sur le texte brut complet — cette extraction n'est pas utilisée
+            # pour accepter/rejeter le relevé, uniquement pour information.
 
-            # Cas A — code postal + ville + nom sur la même ligne
+            # Ligne avec code postal : "75900 PARIS CEDEX 15 ASSO CULTURE MUSIQUE"
             m_nom = re.search(
                 r"\d{5}\b.+?((?:ASSO|ASSOCIATION|UNION|LIGUE|FEDERATION|CLUB"
-                r"|COMITE|GROUPE|FONDATION|SYNDICAT|AMICALE|FOYER|CENTRE|CERCLE"
-                r"|COLLECTIF)[A-Z\s]{3,60})",
+                r"|COMITE|GROUPE|FONDATION|SYNDICAT|AMICALE|COLLECTIF)[A-Z\s]{3,60})",
                 ligne_norm,
             )
             if m_nom:
                 releve.nom_asso_pdf = m_nom.group(1).strip()
                 break
-
-            # Cas B — ligne commençant par un préfixe légal NON AMBIGU.
-            # On exclut CENTRE, FOYER, CERCLE qui sont aussi utilisés par les
-            # banques et organismes non associatifs ("CENTRE FINANCIER",
-            # "FOYER SOCIAL", etc.) et provoqueraient de faux positifs.
-            # Les associations dont le nom commence par ces mots seront
-            # capturées par cas A (code postal) ou cas C (correspondance config).
+            # Ligne débutant par un préfixe légal non ambigu
             if re.match(
                 r"^(?:ASSO|ASSOCIATION|UNION|LIGUE|FEDERATION|CLUB|COMITE"
                 r"|GROUPE|FONDATION|SYNDICAT|AMICALE|COLLECTIF)\b",
@@ -577,14 +567,12 @@ class LaPosteParser:
             ):
                 releve.nom_asso_pdf = ligne_norm.strip()
                 break
-
-            # Cas C — ligne dédiée sans préfixe légal (ex : "JAZZ CLUB DES AMIS")
-            # Chercher une ligne dans le bloc d'en-tête (avant "Vos opérations")
-            # qui ressemble à un nom propre (uniquement majuscules + espaces,
-            # longueur raisonnable, pas une adresse ni un titre de section).
+            # Ligne contenant directement le nom de la config (sans préfixe légal)
+            # Utilise la même normalisation que _valider_releve (minuscules)
             if self.nom_association:
-                nom_conf_norm = self._nom_sans_prefixe(self.nom_association)
-                if nom_conf_norm and nom_conf_norm in ligne_norm:
+                nom_conf_norm = self._normaliser_pour_recherche(self.nom_association)
+                ligne_rech = self._normaliser_pour_recherche(ligne)
+                if nom_conf_norm and nom_conf_norm in ligne_rech:
                     releve.nom_asso_pdf = ligne_norm.strip()
                     break
 
