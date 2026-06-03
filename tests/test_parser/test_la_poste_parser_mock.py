@@ -163,6 +163,53 @@ class TestValiderReleve:
         assert parser._normaliser_nom("Société  Étrange") == "SOCIETE ETRANGE"
         assert parser._normaliser_nom("asso  culture  musique") == "ASSO CULTURE MUSIQUE"
 
+    def test_nom_sans_prefixe(self, parser):
+        """_nom_sans_prefixe supprime les préfixes légaux courants."""
+        assert parser._nom_sans_prefixe("ASSO CULTURE MUSIQUE") == "CULTURE MUSIQUE"
+        assert parser._nom_sans_prefixe("ASSOCIATION DES AMIS") == "DES AMIS"
+        assert parser._nom_sans_prefixe("LIGUE DES DROITS") == "DES DROITS"
+        # Sans préfixe → inchangé
+        assert parser._nom_sans_prefixe("JAZZ CLUB DES AMIS") == "JAZZ CLUB DES AMIS"
+        assert parser._nom_sans_prefixe("Culture Musique") == "CULTURE MUSIQUE"
+
+    def test_valide_user_entre_nom_sans_prefixe(self, parser):
+        """L'utilisateur entre 'Culture Musique', le PDF a 'ASSO CULTURE MUSIQUE'."""
+        from core.parser.la_poste_parser import LaPosteParser
+        from core.parser.models import ReleveInfo
+        # Config : l'user n'entre que le nom, sans "ASSO" devant
+        p = LaPosteParser({"nom": "Culture Musique", "iban": "", "bic": "", "numero_compte": ""})
+        r = ReleveInfo(fichier="test.pdf")
+        r.nom_asso_pdf = "ASSO CULTURE MUSIQUE"  # PDF ajoute "ASSO"
+        p._valider_releve(r)
+        assert r.valide is True, f"Attendu valide, raisons: {r.raisons_rejet}"
+
+    def test_valide_user_entre_nom_avec_prefixe(self, parser):
+        """L'user entre 'Association Culture Musique', le PDF a 'ASSO CULTURE MUSIQUE'."""
+        from core.parser.la_poste_parser import LaPosteParser
+        from core.parser.models import ReleveInfo
+        p = LaPosteParser({
+            "nom": "Association Culture Musique",
+            "iban": "", "bic": "", "numero_compte": "",
+        })
+        r = ReleveInfo(fichier="test.pdf")
+        r.nom_asso_pdf = "ASSO CULTURE MUSIQUE"
+        p._valider_releve(r)
+        # Les deux donnent "CULTURE MUSIQUE" après suppression du préfixe
+        assert r.valide is True, f"Attendu valide, raisons: {r.raisons_rejet}"
+
+    def test_valide_nom_sans_prefixe_dans_pdf(self, parser):
+        """Le PDF peut aussi avoir le nom sans préfixe (Jazz Club, etc.)."""
+        from core.parser.la_poste_parser import LaPosteParser
+        from core.parser.models import ReleveInfo
+        p = LaPosteParser({
+            "nom": "Jazz Club des Amis",
+            "iban": "", "bic": "", "numero_compte": "",
+        })
+        r = ReleveInfo(fichier="test.pdf")
+        r.nom_asso_pdf = "JAZZ CLUB DES AMIS"  # pas de préfixe dans le PDF
+        p._valider_releve(r)
+        assert r.valide is True, f"Attendu valide, raisons: {r.raisons_rejet}"
+
 
 class TestParserFichierMock:
     """Tests de parser_fichier avec pdfplumber mocké."""
@@ -301,6 +348,18 @@ Page 1/1"""
         parser._extraire_metadonnees(texte, r)
         # Le nom doit être extrait via le pattern code postal
         assert "CULTURE MUSIQUE" in r.nom_asso_pdf or r.nom_asso_pdf != ""
+
+    def test_extraire_metadonnees_nom_sans_prefixe_via_correspondance(self):
+        """Cas C: nom sans préfixe légal extrait par correspondance avec la config."""
+        from core.parser.la_poste_parser import LaPosteParser
+        from core.parser.models import ReleveInfo
+        # Asso dont le nom ne commence pas par ASSO/ASSOCIATION/etc.
+        p = LaPosteParser({"nom": "Jazz Club des Amis", "iban": "", "bic": "", "numero_compte": ""})
+        # PDF avec le nom sur une ligne dédiée (pas de préfixe)
+        texte = "Releve de votre CCP\nJAZZ CLUB DES AMIS\nSituation du CCP"
+        r = ReleveInfo(fichier="test.pdf")
+        p._extraire_metadonnees(texte, r)
+        assert r.nom_asso_pdf != "", f"Nom non extrait — attendu 'JAZZ CLUB DES AMIS'"
 
     def test_extraire_soldes_format_2013(self, parser):
         """Le format 2013-2018 'Solde au DD/MM/YYYY' est reconnu sans le mot 'Ancien'."""
