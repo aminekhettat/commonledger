@@ -1,12 +1,51 @@
 # CHANGELOG
 
 
+## v0.6.2 (2026-06-03)
+
+### Bug Fixes
+
+- Ignore PDF footnote lines (e.g. 4Fraisetcotisations) in label collection
+  ([`1a6b728`](https://github.com/aminekhettat/commonledger/commit/1a6b7285dd0b045fa5dd7baa34b748f36c0a0f48))
+
+La Banque Postale PDFs use digit superscripts as footnote markers (e.g. '4')
+
+to flag fees/cotisations. pdfplumber reads these as '4FRAIS...' or
+
+'4Fraisetcotisationsper├ºusourembours├®s.' in the text stream.
+
+Previous behaviour: footnote legend lines were appended to the preceding
+
+transaction label (e.g. VIREMENT INSTANTANE ... 4Fraisetcotisations...).
+
+Fix: _est_ligne_ignoree() now detects lines where digit(s) are immediately
+
+followed by a letter with no space (footnote pattern). Lines like
+
+'6121209 Billetterie...' (digit + space + letter = legitimate reference)
+
+are correctly NOT filtered.
+
+Also corrected the misleading comment in csv_parser.comparer_avec_pdf:
+
+both CSV and PDF contain complete labels; they differ because the bank
+
+represents the transaction ID slightly differently per export format.
+
+333 tests, 100 coverage.
+
+
 ## v0.6.1 (2026-06-03)
 
 ### Bug Fixes
 
 - Set chart PNG export resolution to 300 DPI (print quality)
   ([`8876f14`](https://github.com/aminekhettat/commonledger/commit/8876f143c24321f2f39a2006c12023e7511ea441))
+
+### Chores
+
+- **release**: V0.6.1 [skip ci]
+  ([`1d185e2`](https://github.com/aminekhettat/commonledger/commit/1d185e2672a64a2a99295a4170b10cac14691d9a))
 
 
 ## v0.6.0 (2026-06-02)
