@@ -1,12 +1,35 @@
 # CHANGELOG
 
 
+## v0.7.7 (2026-06-03)
+
+### Testing
+
+- Cover _est_ligne_ignoree digit patterns (CI coverage on Python 3.11)
+  ([`62e95fc`](https://github.com/aminekhettat/commonledger/commit/62e95fcd7f59d52303b87efd084ab02df6ff651a))
+
+Lines 738/748 in la_poste_parser (_est_ligne_ignoree) were covered locally
+
+under Python 3.14 but not on CI Python 3.11 runners. Added explicit unit
+
+tests for the two digit-based rules: standalone page numbers (^\d+$)
+
+and footnote markers (^\d+[A-Za-z]) to guarantee coverage on all Python
+
+versions. 348 tests, 100% coverage.
+
+
 ## v0.7.6 (2026-06-03)
 
 ### Bug Fixes
 
 - Sort imports (ruff I001) after TYPE_CHECKING additions
   ([`008da40`](https://github.com/aminekhettat/commonledger/commit/008da4097e376b7f3fcedc9495e1713ef94ed1a8))
+
+### Chores
+
+- **release**: V0.7.6 [skip ci]
+  ([`ccd7c6e`](https://github.com/aminekhettat/commonledger/commit/ccd7c6e98a6ed04a0a814e1c4fa9b6b1e802ca6a))
 
 
 ## v0.7.5 (2026-06-03)
