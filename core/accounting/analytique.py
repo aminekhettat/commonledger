@@ -16,11 +16,13 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from typing import TYPE_CHECKING, Any
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+if TYPE_CHECKING:
+    from ..categorizer.rules_engine import MoteurCategorisation
 
 from ..parser.models import Transaction
 
@@ -178,7 +180,7 @@ class ComptaAnalytique:
         self.sauvegarder()
         return projet
 
-    def modifier_projet(self, projet_id: str, **kwargs: Any) -> Projet:
+    def modifier_projet(self, projet_id: str, **kwargs: object) -> Projet:
         """
         Modifie les attributs d'un projet existant.
 
@@ -233,7 +235,7 @@ class ComptaAnalytique:
         self,
         projet_id: str,
         transactions: list[Transaction],
-        moteur: Any,
+        moteur: MoteurCategorisation,
     ) -> BilanProjet:
         """
         Calcule le bilan comptable d'un projet.
@@ -283,7 +285,9 @@ class ComptaAnalytique:
 
         return bilan
 
-    def calculer_tous_bilans(self, transactions: list[Transaction], moteur: Any) -> list[BilanProjet]:
+    def calculer_tous_bilans(
+        self, transactions: list[Transaction], moteur: MoteurCategorisation
+    ) -> list[BilanProjet]:
         """
         Calcule le bilan de tous les projets actifs.
 

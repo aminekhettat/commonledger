@@ -40,7 +40,10 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .compte_resultat import CompteResultat
 
 logger = logging.getLogger(__name__)
 
@@ -359,7 +362,7 @@ class GestionnaireBilan:
     def construire_bilan(
         self,
         annee: int,
-        compte_resultat: Any,  # CompteResultat
+        compte_resultat: CompteResultat,
         solde_bancaire: Decimal,
         caisse: Decimal = Decimal("0"),
         fonds_associatifs: Decimal = Decimal("0"),
