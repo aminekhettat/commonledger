@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v0.7.2 (2026-06-03)
+
+### Refactoring
+
+- Simplify association name validation ÔÇö direct substring search in PDF
+  ([`911ba7f`](https://github.com/aminekhettat/commonledger/commit/911ba7fe265f3dee4bdd84f472902b639c2be19b))
+
+Replace the complex prefix-stripping logic with a direct search:
+
+1. Normalize the config name (strip accents, lowercase, collapse spaces)
+
+2. Search for the resulting string as a substring in the normalized PDF text
+
+This means 'culture musique' (from config) is found inside
+
+'asso culture musique' (from PDF) without any prefix-list maintenance.
+
+Works for any association name, with or without legal prefix, in any format.
+
+New method: _normaliser_pour_recherche() (lowercase + accent-free)
+
+_valider_releve() now receives texte_pdf: str for name check.
+
+Extraction of nom_asso_pdf for logging simplified accordingly.
+
+343 tests, 100 coverage.
+
+
 ## v0.7.1 (2026-06-03)
 
 ### Bug Fixes
@@ -29,6 +57,11 @@ extraction trigger list. Removed CENTRE, FOYER, CERCLE from cas B triggers
 New methods: _nom_sans_prefixe(), _PREFIXES_LEGAUX regex.
 
 344 tests, 100 coverage.
+
+### Chores
+
+- **release**: V0.7.1 [skip ci]
+  ([`e695f39`](https://github.com/aminekhettat/commonledger/commit/e695f394d4c24cb718c75e7e3633999f6fb0acf0))
 
 
 ## v0.7.0 (2026-06-03)
