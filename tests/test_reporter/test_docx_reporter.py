@@ -221,7 +221,9 @@ class TestDocxReporterTableaux:
 class TestDocxReporterConversionPDF:
     """Tests de conversion PDF avec mocks (Windows COM et LibreOffice)."""
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Word COM disponible uniquement sur Windows")
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="Word COM disponible uniquement sur Windows"
+    )
     def test_convertir_en_pdf_word_com_succes(self, reporter, tmp_path):
         """Test conversion via Word COM mockée."""
         docx_path = str(tmp_path / "test.docx")

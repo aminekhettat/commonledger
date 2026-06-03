@@ -16,11 +16,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
 if TYPE_CHECKING:
     from ..categorizer.rules_engine import MoteurCategorisation
 

@@ -615,7 +615,9 @@ class LaPosteParser:
 
     # ── Extraction des transactions ────────────────────────────────────────────
 
-    def _extraire_lignes_page(self, texte: str, annee: int, mois_fichier: int | None) -> list[dict[str, Any]]:
+    def _extraire_lignes_page(
+        self, texte: str, annee: int, mois_fichier: int | None
+    ) -> list[dict[str, Any]]:
         """
         Extrait les lignes de transaction depuis le texte brut d'une page.
 
@@ -848,7 +850,9 @@ class LaPosteParser:
         # Par défaut : débit (plus fréquent pour les opérations ambiguës)
         return False
 
-    def _construire_transactions(self, lignes: list[dict[str, Any]], nom_fichier: str) -> list[Transaction]:
+    def _construire_transactions(
+        self, lignes: list[dict[str, Any]], nom_fichier: str
+    ) -> list[Transaction]:
         """
         Convertit les lignes extraites en objets Transaction dédupliqués.
 

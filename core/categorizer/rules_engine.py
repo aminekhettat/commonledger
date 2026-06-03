@@ -250,7 +250,9 @@ class MoteurCategorisation:
             automatique=True,
         )
 
-    def categoriser_lot(self, transactions: list[Transaction], seuil_auto: float = 0.3) -> dict[str, Any]:
+    def categoriser_lot(
+        self, transactions: list[Transaction], seuil_auto: float = 0.3
+    ) -> dict[str, Any]:
         """
         Catégorise un lot de transactions.
 
