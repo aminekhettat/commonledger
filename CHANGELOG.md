@@ -1,6 +1,52 @@
 # CHANGELOG
 
 
+## v0.7.0 (2026-06-03)
+
+### Features
+
+- Robustify PDF parser with full validation + strict CI gates
+  ([`e7a29b3`](https://github.com/aminekhettat/commonledger/commit/e7a29b3b756a5850310d4d2f0cb6458446d2a600))
+
+PDF PARSER ÔÇö Full validation against association config:
+
+- ReleveInfo gains iban_pdf, bic_pdf, nom_asso_pdf, raisons_rejet fields
+
+- _valider_releve(): validates nom (partial/accent-insensitive), IBAN, BIC,
+
+numero_compte against config; populates raisons_rejet; sets valide flag
+
+- _extraire_metadonnees(): extracts IBAN (fixed regex for alphanumeric IBANs),
+
+BIC, and nom association (postal code pattern + direct pattern)
+
+- _extraire_soldes(): added 2013-2018 'Solde au DD/MM/YYYY' fallback pattern
+
+PRE-PUSH HOOK ÔÇö All four tools now mandatory before push:
+
+- pytest: 100)
+
+- ruff check + ruff format --check
+
+- mypy: strict checks on core/ (disallow_untyped_defs, no_implicit_optional...)
+
+- bandit: severity=low, confidence=low, no skips in core/
+
+- sphinx: docs up to date
+
+PYPROJECT.TOML ÔÇö Strict configuration:
+
+- pytest: --cov-fail-under=100
+
+- coverage: fail_under=100
+
+- mypy: disallow_untyped_defs, check_untyped_defs, warn_unused_ignores, etc.
+
+- bandit: severity=low (catches all issues, even minor)
+
+339 tests, 100 coverage.
+
+
 ## v0.6.2 (2026-06-03)
 
 ### Bug Fixes
@@ -33,6 +79,11 @@ both CSV and PDF contain complete labels; they differ because the bank
 represents the transaction ID slightly differently per export format.
 
 333 tests, 100 coverage.
+
+### Chores
+
+- **release**: V0.6.2 [skip ci]
+  ([`739e0df`](https://github.com/aminekhettat/commonledger/commit/739e0df32e6141a464d76303bbe52a7fd916a2bb))
 
 
 ## v0.6.1 (2026-06-03)
