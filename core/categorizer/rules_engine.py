@@ -25,6 +25,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from ..parser.models import Transaction, TransactionSplit
 
@@ -175,7 +176,7 @@ class MoteurCategorisation:
 
     def sauvegarder(self) -> None:
         """Sauvegarde les catégories modifiées dans le fichier JSON."""
-        data: dict[str, list] = {"recettes": [], "depenses": []}
+        data: dict[str, list[Any]] = {"recettes": [], "depenses": []}
 
         for cat in self.categories.values():
             cat_dict = {
@@ -249,7 +250,7 @@ class MoteurCategorisation:
             automatique=True,
         )
 
-    def categoriser_lot(self, transactions: list[Transaction], seuil_auto: float = 0.3) -> dict:
+    def categoriser_lot(self, transactions: list[Transaction], seuil_auto: float = 0.3) -> dict[str, Any]:
         """
         Catégorise un lot de transactions.
 

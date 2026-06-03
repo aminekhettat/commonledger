@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 from ..categorizer.rules_engine import Categorie, MoteurCategorisation
 from ..parser.models import Transaction
@@ -142,7 +143,9 @@ class CompteResultat:
 
     def _calculer(self) -> None:
         """Effectue tous les calculs du compte de résultat."""
-        # Accumulateurs par catégorie
+        # Accumulateurs par catégorie.
+        # Les clés sont toujours des str (jamais None) car les transactions non
+        # catégorisées sont filtrées à la ligne suivante avant d'être accumulées.
         recettes_par_cat: dict[str, list[tuple[Decimal, Transaction]]] = {}
         depenses_par_cat: dict[str, list[tuple[Decimal, Transaction]]] = {}
 
@@ -166,11 +169,13 @@ class CompteResultat:
     def _traiter_transaction_simple(
         self,
         transaction: Transaction,
-        recettes: dict,
-        depenses: dict,
+        recettes: dict[str, list[tuple[Decimal, Transaction]]],
+        depenses: dict[str, list[tuple[Decimal, Transaction]]],
     ) -> None:
         """Ajoute une transaction simple (non éclatée) aux accumulateurs."""
         cat_id = transaction.categorie_id
+        # Invariant : seules les transactions catégorisées arrivent ici (filtre dans _calculer)
+        assert cat_id is not None, "categorie_id ne doit pas être None dans les accumulateurs"
         montant = abs(transaction.montant)
 
         if transaction.est_credit:
@@ -181,8 +186,8 @@ class CompteResultat:
     def _traiter_transaction_splittee(
         self,
         transaction: Transaction,
-        recettes: dict,
-        depenses: dict,
+        recettes: dict[str, list[tuple[Decimal, Transaction]]],
+        depenses: dict[str, list[tuple[Decimal, Transaction]]],
     ) -> None:
         """Répartit les splits d'une transaction dans les accumulateurs."""
         for split in transaction.splits:
@@ -271,7 +276,7 @@ class CompteResultat:
         """Solde bancaire estimé en fin de période (solde initial + résultat)."""
         return self.solde_initial + self.resultat_net
 
-    def evolution_mensuelle(self) -> list[dict]:
+    def evolution_mensuelle(self) -> list[dict[str, Any]]:
         """
         Calcule les totaux recettes/dépenses mois par mois sur la période.
 
@@ -280,8 +285,8 @@ class CompteResultat:
         """
         from collections import defaultdict
 
-        mois_recettes: dict[tuple, Decimal] = defaultdict(Decimal)
-        mois_depenses: dict[tuple, Decimal] = defaultdict(Decimal)
+        mois_recettes: dict[tuple[int, int], Decimal] = defaultdict(Decimal)
+        mois_depenses: dict[tuple[int, int], Decimal] = defaultdict(Decimal)
 
         for t in self._transactions_periode:
             cle = (t.date.year, t.date.month)
@@ -322,7 +327,7 @@ class CompteResultat:
 
         return resultats
 
-    def verifier_coherence_soldes(self, releves_info: list) -> list[AlerteCoherence]:
+    def verifier_coherence_soldes(self, releves_info: list[Any]) -> list[AlerteCoherence]:
         """
         Vérifie que les soldes calculés correspondent aux soldes des relevés.
 

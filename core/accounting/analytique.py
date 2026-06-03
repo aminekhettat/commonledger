@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from ..parser.models import Transaction
 
@@ -51,7 +52,7 @@ class Projet:
     couleur: str = "#1565C0"
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "nom": self.nom,
@@ -64,7 +65,7 @@ class Projet:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> Projet:
+    def from_dict(cls, d: dict[str, Any]) -> Projet:
         return cls(
             id=d["id"],
             nom=d["nom"],
@@ -177,7 +178,7 @@ class ComptaAnalytique:
         self.sauvegarder()
         return projet
 
-    def modifier_projet(self, projet_id: str, **kwargs) -> Projet:
+    def modifier_projet(self, projet_id: str, **kwargs: Any) -> Projet:
         """
         Modifie les attributs d'un projet existant.
 
@@ -232,7 +233,7 @@ class ComptaAnalytique:
         self,
         projet_id: str,
         transactions: list[Transaction],
-        moteur,
+        moteur: Any,
     ) -> BilanProjet:
         """
         Calcule le bilan comptable d'un projet.
@@ -282,7 +283,7 @@ class ComptaAnalytique:
 
         return bilan
 
-    def calculer_tous_bilans(self, transactions: list[Transaction], moteur) -> list[BilanProjet]:
+    def calculer_tous_bilans(self, transactions: list[Transaction], moteur: Any) -> list[BilanProjet]:
         """
         Calcule le bilan de tous les projets actifs.
 

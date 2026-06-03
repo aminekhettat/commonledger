@@ -30,6 +30,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 import pdfplumber
 
@@ -174,7 +175,7 @@ class LaPosteParser:
         nom_association: Nom de l'association pour validation.
     """
 
-    def __init__(self, config_association: dict):
+    def __init__(self, config_association: dict[str, Any]) -> None:
         """
         Initialise le parseur avec la configuration de l'association.
 
@@ -348,7 +349,7 @@ class LaPosteParser:
             with pdfplumber.open(chemin_pdf) as pdf:
                 texte_complet = ""
                 texte_page_0 = ""
-                toutes_lignes: list[dict] = []
+                toutes_lignes: list[dict[str, Any]] = []
 
                 for num_page, page in enumerate(pdf.pages):
                     texte_page = page.extract_text() or ""
@@ -384,7 +385,7 @@ class LaPosteParser:
 
     # ── Extraction des métadonnées ────────────────────────────────────────────
 
-    def _extraire_periode_pdf(self, texte: str) -> tuple:
+    def _extraire_periode_pdf(self, texte: str) -> tuple[date | None, date | None]:
         """
         Extrait la période de couverture depuis le texte brut du PDF.
 
@@ -614,7 +615,7 @@ class LaPosteParser:
 
     # ── Extraction des transactions ────────────────────────────────────────────
 
-    def _extraire_lignes_page(self, texte: str, annee: int, mois_fichier: int | None) -> list[dict]:
+    def _extraire_lignes_page(self, texte: str, annee: int, mois_fichier: int | None) -> list[dict[str, Any]]:
         """
         Extrait les lignes de transaction depuis le texte brut d'une page.
 
@@ -847,7 +848,7 @@ class LaPosteParser:
         # Par défaut : débit (plus fréquent pour les opérations ambiguës)
         return False
 
-    def _construire_transactions(self, lignes: list[dict], nom_fichier: str) -> list[Transaction]:
+    def _construire_transactions(self, lignes: list[dict[str, Any]], nom_fichier: str) -> list[Transaction]:
         """
         Convertit les lignes extraites en objets Transaction dédupliqués.
 

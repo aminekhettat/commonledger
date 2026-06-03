@@ -46,6 +46,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from .models import ParseError, ReleveInfo, Transaction
 
@@ -138,7 +139,7 @@ class CSVParserLaBanquePostale:
         "solde": "solde_final",
     }
 
-    def __init__(self, config_association: dict):
+    def __init__(self, config_association: dict[str, Any]):
         self.numero_compte = config_association.get("numero_compte", "")
         self.nom_association = config_association.get("nom", "")
         self.iban = config_association.get("iban", "").replace(" ", "")
@@ -171,9 +172,9 @@ class CSVParserLaBanquePostale:
             return False
         return bool(_parse_date_csv(ligne[0]))
 
-    def _extraire_metadonnees(self, lignes_meta: list[list[str]]) -> dict:
+    def _extraire_metadonnees(self, lignes_meta: list[list[str]]) -> dict[str, Any]:
         """Extrait les métadonnées des lignes d'information."""
-        meta = {
+        meta: dict[str, Any] = {
             "numero_compte": "",
             "periode_debut": None,
             "periode_fin": None,
@@ -467,7 +468,7 @@ class CSVParserLaBanquePostale:
         transactions_csv: list[Transaction],
         transactions_pdf: list[Transaction],
         annee: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Compare les transactions CSV avec celles extraites des PDFs.
 
@@ -501,7 +502,7 @@ class CSVParserLaBanquePostale:
         # pour gérer les doublons légitimes (même jour, même montant).
         from collections import Counter
 
-        def _cle(t: Transaction) -> tuple:
+        def _cle(t: Transaction) -> tuple[date, Decimal]:
             return (t.date, t.montant)
 
         cles_csv = Counter(_cle(t) for t in csv_annee)

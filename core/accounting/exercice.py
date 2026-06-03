@@ -19,6 +19,7 @@ import shutil
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from ..categorizer.rules_engine import MoteurCategorisation
 from ..parser.models import ReleveInfo, Transaction
@@ -58,7 +59,7 @@ class Exercice:
         self.repertoire.mkdir(parents=True, exist_ok=True)
 
         self.transactions: list[Transaction] = []
-        self.releves: list[dict] = []
+        self.releves: list[dict[str, Any]] = []
         self.solde_initial: Decimal = Decimal("0")
         self.budget: dict[str, Decimal] = {}
 
@@ -310,7 +311,7 @@ class Exercice:
             return None
         return montant_reel - self.budget[cat_id]
 
-    def resume(self) -> dict:
+    def resume(self) -> dict[str, Any]:
         """Retourne un résumé rapide de l'état de l'exercice."""
         non_cat = len(self.transactions_non_categorisees())
         return {

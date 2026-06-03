@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ class Immobilisation:
         )
         return amort
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "designation": self.designation,
@@ -123,7 +124,7 @@ class Immobilisation:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> Immobilisation:
+    def from_dict(cls, d: dict[str, Any]) -> Immobilisation:
         import uuid
 
         return cls(
@@ -358,7 +359,7 @@ class GestionnaireBilan:
     def construire_bilan(
         self,
         annee: int,
-        compte_resultat,  # CompteResultat
+        compte_resultat: Any,  # CompteResultat
         solde_bancaire: Decimal,
         caisse: Decimal = Decimal("0"),
         fonds_associatifs: Decimal = Decimal("0"),

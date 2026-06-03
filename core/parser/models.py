@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 
 class ParseError(Exception):
@@ -48,10 +49,10 @@ class Transaction:
     projet_id: str | None = None
     memo: str = ""
     splits: list[TransactionSplit] = field(default_factory=list)
-    details: dict = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     verrouille: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Génère l'id_unique si absent.
 
@@ -92,7 +93,7 @@ class Transaction:
         """Retourne True si la transaction a une catégorie ou des splits."""
         return self.categorie_id is not None or self.est_splittee
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Sérialise la transaction en dictionnaire pour la persistance JSON."""
         return {
             "date": self.date.isoformat(),
@@ -110,7 +111,7 @@ class Transaction:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> Transaction:
+    def from_dict(cls, d: dict[str, Any]) -> Transaction:
         """Recrée une Transaction depuis un dictionnaire JSON."""
         from datetime import date as date_type
 
@@ -153,9 +154,9 @@ class TransactionSplit:
     categorie_id: str
     projet_id: str | None = None
     memo: str = ""
-    details: dict = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "montant": str(self.montant),
             "categorie_id": self.categorie_id,
@@ -165,7 +166,7 @@ class TransactionSplit:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> TransactionSplit:
+    def from_dict(cls, d: dict[str, Any]) -> TransactionSplit:
         return cls(
             montant=Decimal(d["montant"]),
             categorie_id=d["categorie_id"],
